@@ -3,34 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HRG PC Builder – Live Quotes & Inventory</title>
+  <title>HRG PC Builder – Private Dashboard</title>
   <style>
     body {
       font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Helvetica Neue, Arial, sans-serif;
-      background: #0f1115;
-      color: #e6e9ef;
-      margin: 0;
-      padding: 24px;
+      background:#0f1115;color:#e6e9ef;margin:0;padding:24px;
     }
-    h1, h2, h3 { margin-top: 0; }
-    .btn { padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; }
-    .primary { background: linear-gradient(90deg,#4c6fff,#7aa2ff); color: #fff; }
-    .ghost { background: #1b2030; color: #fff; }
-    input, select {
-      width: 100%; padding: 8px 10px; margin-bottom: 10px; border-radius: 8px;
-      border: 1px solid #2a3042; background: #151823; color: #e6e9ef;
-    }
-    label { font-size: 13px; color: #aab1c4; display: block; margin-top: 6px; }
-    .tiny { font-size: 12px; color: #aab1c4; }
-    table { width: 100%; margin-top: 16px; border-collapse: collapse; }
-    th, td { padding: 6px 10px; border-bottom: 1px solid #2a3042; text-align: left; }
-    th { color: #7aa2ff; }
-    tr:hover { background: #1b2030; }
+    h1,h2,h3{margin-top:0}
+    .btn{padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;transition:.2s}
+    .primary{background:linear-gradient(90deg,#4c6fff,#7aa2ff);color:#fff}
+    .ghost{background:#1b2030;color:#fff}
+    input,select{width:100%;padding:8px 10px;margin-bottom:10px;border-radius:8px;
+      border:1px solid #2a3042;background:#151823;color:#e6e9ef}
+    label{font-size:13px;color:#aab1c4;display:block;margin-top:6px}
+    .tiny{font-size:12px;color:#aab1c4}
+    table{width:100%;margin-top:16px;border-collapse:collapse}
+    th,td{padding:6px 10px;border-bottom:1px solid #2a3042;text-align:left}
+    th{color:#7aa2ff}
+    tr:hover{background:#1b2030}
+    #loginScreen{max-width:360px;margin:80px auto;text-align:center}
+    #loginScreen input{text-align:center}
   </style>
 </head>
 <body>
+
+<!-- ================= LOGIN SCREEN ================= -->
+<div id="loginScreen">
+  <h2>HRG System Login</h2>
+  <input id="loginEmail" type="email" placeholder="Email" />
+  <input id="loginPassword" type="password" placeholder="Password" />
+  <button id="btnLogin" class="btn primary">Login</button>
+  <p id="loginError" class="tiny"></p>
+</div>
+
+<!-- ================= APP CONTENT ================= -->
+<div id="appContent" style="display:none;">
+  <button id="btnLogout" class="btn ghost" style="float:right;">Logout</button>
   <h1>HRG PC Builder – Live Quotes & Inventory</h1>
-  <p class="tiny">Firebase and backend fully connected.</p>
+  <p class="tiny">Authenticated access only – Firebase connected.</p>
 
   <button id="btnTest" class="btn ghost">Test Connection</button>
   <pre id="output" style="margin-top:16px;background:#151823;padding:12px;border-radius:8px;"></pre>
@@ -42,9 +52,7 @@
   <button id="btnReserve" class="btn ghost">Reserve Stock</button>
 
   <table id="quoteTable">
-    <thead>
-      <tr><th>Category</th><th>Part</th><th>Price</th><th>SKU</th><th>Status</th></tr>
-    </thead>
+    <thead><tr><th>Category</th><th>Part</th><th>Price</th><th>SKU</th><th>Status</th></tr></thead>
     <tbody></tbody>
   </table>
 
@@ -53,164 +61,136 @@
   <input id="clientPhone" placeholder="Phone" />
   <input id="clientEmail" placeholder="Email" />
   <button id="btnSaveQuote" class="btn primary">Save Quote</button>
+</div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<!-- ================= SCRIPTS ================= -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 
-  <script>
-  // ---------------- Firebase Config ----------------
-  const firebaseConfig = {
-    apiKey: "AIzaSyCVXsMYLXlGrAuLWFnLe21IfV2a_vLdi-o",
-    authDomain: "hrg-pc-build.firebaseapp.com",
-    projectId: "hrg-pc-build",
-    storageBucket: "hrg-pc-build.firebasestorage.app",
-    messagingSenderId: "846697611824",
-    appId: "1:846697611824:web:eb58f939302d1b230ba3f5"
-  };
+<script>
+/* ---------- Firebase Config ---------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCVXsMYLXlGrAuLWFnLe21IfV2a_vLdi-o",
+  authDomain: "hrg-pc-build.firebaseapp.com",
+  projectId: "hrg-pc-build",
+  storageBucket: "hrg-pc-build.firebasestorage.app",
+  messagingSenderId: "846697611824",
+  appId: "1:846697611824:web:eb58f939302d1b230ba3f5"
+};
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
 
-  // Safe init
-  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-  else firebase.app();
+/* ---------- Auth Logic ---------- */
+auth.onAuthStateChanged(user=>{
+  const login=document.getElementById("loginScreen");
+  const app=document.getElementById("appContent");
+  if(user){login.style.display="none";app.style.display="block";}
+  else{login.style.display="block";app.style.display="none";}
+});
+document.getElementById("btnLogin").onclick=async()=>{
+  const email=document.getElementById("loginEmail").value.trim();
+  const pass=document.getElementById("loginPassword").value.trim();
+  const err=document.getElementById("loginError");
+  try{await auth.signInWithEmailAndPassword(email,pass);err.textContent="";}
+  catch(e){err.textContent="Login failed: "+e.message;}
+};
+document.getElementById("btnLogout").onclick=()=>auth.signOut();
 
-  const db = firebase.firestore();
-  const storage = firebase.storage();
+/* ---------- Cloud Function URLs ---------- */
+const FN_PRICE="https://us-central1-hrg-pc-build.cloudfunctions.net/priceSync";
+const FN_SUGGEST="https://us-central1-hrg-pc-build.cloudfunctions.net/stockSuggest";
+const FN_RESERVE="https://us-central1-hrg-pc-build.cloudfunctions.net/reservePart";
 
-  // Cloud Function endpoints
-  const FN_PRICE = "https://us-central1-hrg-pc-build.cloudfunctions.net/priceSync";
-  const FN_SUGGEST = "https://us-central1-hrg-pc-build.cloudfunctions.net/stockSuggest";
-  const FN_RESERVE = "https://us-central1-hrg-pc-build.cloudfunctions.net/reservePart";
+/* ---------- Test Connection ---------- */
+document.getElementById("btnTest").onclick=async()=>{
+  const out=document.getElementById("output");
+  out.textContent="Testing connection…";
+  try{
+    const test=await db.collection("parts").limit(1).get();
+    const count=test.size;
+    const r=await fetch(FN_PRICE+"?sku=RTX_4070_SUPER");
+    const t=await r.text();
+    out.textContent=`✅ Firebase OK\n✅ Firestore (${count} docs)\n✅ priceSync Response:\n${t}`;
+  }catch(e){out.textContent="❌ "+e.message;}
+};
 
-  // ---------------- Test Connection ----------------
-  document.getElementById("btnTest").onclick = async () => {
-    const out = document.getElementById("output");
-    out.textContent = "Testing connection...";
-    try {
-      const testDoc = await db.collection("parts").limit(1).get();
-      const count = testDoc.size;
-      const res = await fetch(FN_PRICE + "?sku=RTX_4070_SUPER");
-      const text = await res.text();
-      out.textContent =
-        "✅ Firebase Initialized\n" +
-        "✅ Firestore Connected (found " + count + " docs)\n" +
-        "✅ Function Response (priceSync):\n" + text;
-    } catch (err) {
-      out.textContent = "❌ Error: " + err.message;
-    }
-  };
+/* ---------- Quote Builder ---------- */
+const CATEGORIES=["cpu","gpu","mb","ram","storage","psu","cooler","case"];
+const ALLOC={cpu:.25,gpu:.35,mb:.1,ram:.08,storage:.08,psu:.05,cooler:.04,case:.05};
 
-  // ---------------- Quote Builder ----------------
-  const CATEGORIES = ["cpu", "gpu", "mb", "ram", "storage", "psu", "cooler", "case"];
-  const ALLOC = { cpu:.25, gpu:.35, mb:.1, ram:.08, storage:.08, psu:.05, cooler:.04, case:.05 };
+async function suggestPart(category,budgetAlloc){
+  try{
+    const res=await fetch(FN_SUGGEST,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({category,budgetAlloc,preferInStock:document.getElementById("preferStock").checked})});
+    const data=await res.json();return data.part||null;
+  }catch(e){console.error(e);return null;}
+}
+async function reservePart(sku){
+  try{await fetch(FN_RESERVE,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({sku,qty:1})});}
+  catch(e){console.error(e);}
+}
 
-  async function suggestPart(category, budgetAlloc) {
-    try {
-      const res = await fetch(FN_SUGGEST, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category,
-          budgetAlloc,
-          preferInStock: document.getElementById("preferStock").checked
-        })
-      });
-      const data = await res.json();
-      return data.part || null;
-    } catch (err) { console.error("stockSuggest", err); return null; }
+document.getElementById("btnQuote").onclick=async()=>{
+  const total=Number(document.getElementById("budgetInput").value||0);
+  if(total<=0)return alert("Enter a budget first.");
+  const tbody=document.querySelector("#quoteTable tbody");
+  tbody.innerHTML="<tr><td colspan='5'>Building quote…</td></tr>";
+  const results=[];
+  for(const cat of CATEGORIES){
+    const alloc=Math.round(total*(ALLOC[cat]||0.05));
+    const part=await suggestPart(cat,alloc);
+    if(part)results.push(part);
   }
+  tbody.innerHTML=results.map(p=>`
+    <tr>
+      <td>${p.category}</td><td>${p.brand||""} ${p.model||""}</td>
+      <td>$${p.price_usd||0}</td><td class="tiny">${p.sku}</td>
+      <td>${p.in_stock?"✅ In Stock":p.is_new?"🆕 To-Order":(p.order_status||"—")}</td>
+    </tr>`).join("");
+};
 
-  async function reservePart(sku) {
-    try {
-      await fetch(FN_RESERVE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku, qty: 1 })
-      });
-    } catch (err) { console.error("reservePart", err); }
+document.getElementById("btnReserve").onclick=async()=>{
+  const rows=document.querySelectorAll("#quoteTable tbody tr");
+  for(const row of rows){
+    const sku=row.querySelector(".tiny")?.textContent?.trim();
+    if(sku&&!sku.startsWith("NEW_"))await reservePart(sku);
   }
+  alert("Stock reserved where available!");
+};
 
-  document.getElementById("btnQuote").onclick = async () => {
-    const total = Number(document.getElementById("budgetInput").value || 0);
-    if (total <= 0) return alert("Enter a budget first.");
-    const tbody = document.querySelector("#quoteTable tbody");
-    tbody.innerHTML = "<tr><td colspan='5'>Building quote...</td></tr>";
-
-    const results = [];
-    for (const cat of CATEGORIES) {
-      const allocBudget = Math.round(total * (ALLOC[cat] || 0.05));
-      const part = await suggestPart(cat, allocBudget);
-      if (part) results.push(part);
-    }
-
-    tbody.innerHTML = results.map(p => `
-      <tr>
-        <td>${p.category}</td>
-        <td>${p.brand || ""} ${p.model || ""}</td>
-        <td>$${p.price_usd || 0}</td>
-        <td class="tiny">${p.sku}</td>
-        <td>${p.in_stock ? "✅ In Stock" :
-             p.is_new ? "🆕 To-Order" :
-             (p.order_status || "—")}</td>
-      </tr>
-    `).join("");
+/* ---------- Save Quote ---------- */
+function genQuoteId(){
+  const d=new Date(),s=d.toISOString().slice(0,19).replace(/[-:T]/g,"").slice(2,12);
+  return `Q-${s}-${Math.floor(Math.random()*900+100)}`;
+}
+document.getElementById("btnSaveQuote").onclick=async()=>{
+  const tbody=document.querySelector("#quoteTable tbody");
+  const rows=tbody.querySelectorAll("tr");
+  if(!rows.length)return alert("Generate a quote first.");
+  const total=Number(document.getElementById("budgetInput").value||0);
+  const parts=Array.from(rows).map(r=>({
+    category:r.children[0].innerText,
+    brand_model:r.children[1].innerText,
+    price_usd:Number(r.children[2].innerText.replace("$","")),
+    sku:r.children[3].innerText,
+    status:r.children[4].innerText
+  }));
+  const client={
+    name:document.getElementById("clientName").value.trim(),
+    phone:document.getElementById("clientPhone").value.trim(),
+    email:document.getElementById("clientEmail").value.trim()
   };
-
-  document.getElementById("btnReserve").onclick = async () => {
-    const rows = document.querySelectorAll("#quoteTable tbody tr");
-    for (const row of rows) {
-      const sku = row.querySelector(".tiny")?.textContent?.trim();
-      if (sku && !sku.startsWith("NEW_")) await reservePart(sku);
-    }
-    alert("Stock reserved where available!");
-  };
-
-  // ---------------- Save Quote ----------------
-  function generateQuoteId() {
-    const now = new Date();
-    const stamp = now.toISOString().slice(0,19).replace(/[-:T]/g,"").slice(2,12);
-    const rand = Math.floor(Math.random() * 900 + 100);
-    return `Q-${stamp}-${rand}`;
-  }
-
-  async function saveQuote() {
-    const tbody = document.querySelector("#quoteTable tbody");
-    const rows = tbody.querySelectorAll("tr");
-    if (!rows.length) return alert("Generate a quote first.");
-
-    const totalBudget = Number(document.getElementById("budgetInput").value || 0);
-    const parts = Array.from(rows).map(row => ({
-      category: row.children[0].innerText,
-      brand_model: row.children[1].innerText,
-      price_usd: Number(row.children[2].innerText.replace("$","")),
-      sku: row.children[3].innerText,
-      status: row.children[4].innerText
-    }));
-
-    const client = {
-      name: document.getElementById("clientName").value.trim(),
-      phone: document.getElementById("clientPhone").value.trim(),
-      email: document.getElementById("clientEmail").value.trim()
-    };
-
-    const quote = {
-      id: generateQuoteId(),
-      created_at: new Date().toISOString(),
-      total_budget: totalBudget,
-      parts,
-      client,
-      status: "draft"
-    };
-
-    try {
-      await db.collection("quotes").doc(quote.id).set(quote);
-      alert(`✅ Quote saved as ${quote.id}`);
-    } catch (err) {
-      console.error(err);
-      alert("❌ Error saving quote: " + err.message);
-    }
-  }
-
-  document.getElementById("btnSaveQuote").onclick = saveQuote;
-  </script>
+  const quote={id:genQuoteId(),created_at:new Date().toISOString(),
+    total_budget:total,parts,client,status:"draft"};
+  try{await db.collection("quotes").doc(quote.id).set(quote);
+    alert(`✅ Quote saved as ${quote.id}`);}
+  catch(e){alert("❌ "+e.message);}
+};
+</script>
 </body>
 </html>
