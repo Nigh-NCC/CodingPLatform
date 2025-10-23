@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HRG PC Builder System</title>
+  <title>HRG PC Builder Dashboard</title>
+  <link rel="icon" href="favicon.png" type="image/png" />
   <style>
     body {
       font-family: "Montserrat", sans-serif;
-      background-color: #0e0e0e;
+      background: #0d0d0d;
       color: #eee;
       margin: 0;
-      padding: 0;
     }
     header {
       background: #151515;
@@ -20,54 +20,61 @@
       justify-content: space-between;
       border-bottom: 1px solid #333;
     }
-    h1 { margin: 0; font-size: 1.4rem; color: #00b4d8; }
-    main { padding: 2rem; max-width: 1100px; margin: auto; }
+    h1 { margin: 0; color: #00b4d8; font-size: 1.4rem; }
+    main { padding: 2rem; max-width: 1100px; margin: auto; display:none; }
     button {
       background: #00b4d8;
       border: none;
-      color: #fff;
-      padding: 0.6rem 1.2rem;
+      color: white;
+      padding: 0.6rem 1rem;
       border-radius: 6px;
       cursor: pointer;
       font-weight: 600;
     }
     button:hover { background: #0077b6; }
     input, select {
-      padding: 0.4rem;
-      border: 1px solid #333;
-      border-radius: 4px;
-      margin-bottom: 0.5rem;
-      width: 100%;
       background: #1b1b1b;
       color: #fff;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 0.4rem;
+      width: 100%;
+      margin-bottom: 0.5rem;
     }
     .modal {
-      display: none;
-      position: fixed;
-      z-index: 1000;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.7);
-      align-items: center;
-      justify-content: center;
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%; background: rgba(0,0,0,0.7);
+      align-items: center; justify-content: center;
     }
     .modal-content {
       background: #202020;
-      padding: 1.5rem;
-      border-radius: 10px;
-      width: 320px;
+      padding: 1.5rem; border-radius: 10px; width: 320px;
     }
-    #partsList { margin-top: 2rem; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    th, td {
-      border: 1px solid #333;
-      padding: 0.5rem;
-      text-align: left;
+    table {
+      width: 100%; border-collapse: collapse; margin-top: 1rem;
     }
+    th, td { border: 1px solid #333; padding: 0.5rem; text-align: left; }
     th { background: #111; color: #00b4d8; }
+    #authBar {
+      background:#111; padding:1rem; text-align:right; border-bottom:1px solid #333;
+    }
+    #authBar input { width:auto; margin-right:0.4rem; }
   </style>
 </head>
 <body>
+  <div id="authBar">
+    <div id="loggedOut">
+      <input id="loginEmail" placeholder="Email" />
+      <input id="loginPass" type="password" placeholder="Password" />
+      <button onclick="login()">Login</button>
+      <button onclick="register()">Register</button>
+    </div>
+    <div id="loggedIn" style="display:none">
+      Logged in as <span id="userEmail"></span>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </div>
+
   <header>
     <h1>HRG PC Builder Dashboard</h1>
     <button onclick="openModal()">+ Add Part</button>
@@ -92,21 +99,27 @@
       <label>Budget ($):</label>
       <input id="budget" type="number" placeholder="1500" />
       <button onclick="autoBuild()">Build System</button>
+      <button id="saveSystemBtn" style="display:none" onclick="saveSystem()">💾 Save System</button>
       <div id="buildOutput"></div>
     </section>
 
     <section id="partsList">
       <h2>📦 Parts in Inventory</h2>
       <table>
-        <thead>
-          <tr><th>Name</th><th>Brand</th><th>Category</th><th>Price</th><th>Perf</th></tr>
-        </thead>
+        <thead><tr><th>Name</th><th>Brand</th><th>Category</th><th>Price</th><th>Perf</th></tr></thead>
         <tbody id="partsTableBody"></tbody>
+      </table>
+    </section>
+
+    <section id="systemsList">
+      <h2>💾 Saved Systems</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Tier</th><th>Budget</th><th>Total</th></tr></thead>
+        <tbody id="systemsTableBody"></tbody>
       </table>
     </section>
   </main>
 
-  <!-- Modal for Adding Parts -->
   <div id="addPartModal" class="modal">
     <div class="modal-content">
       <h3>Add New Part</h3>
@@ -131,7 +144,15 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
+    // --- Firebase setup ---
     const firebaseConfig = {
       apiKey: "AIzaSyCVXsMYLXlGrAuLWFnLe21IfV2a_vLdi-o",
       authDomain: "hrg-pc-build.firebaseapp.com",
@@ -140,86 +161,123 @@
       messagingSenderId: "846697611824",
       appId: "1:846697611824:web:eb58f939302d1b230ba3f5"
     };
-
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
 
-    // ----- Modal handling -----
+    // --- Auth functions ---
+    window.login = async () => {
+      try {
+        await signInWithEmailAndPassword(auth, loginEmail.value, loginPass.value);
+      } catch (err) { alert(err.message); }
+    };
+    window.register = async () => {
+      try {
+        await createUserWithEmailAndPassword(auth, loginEmail.value, loginPass.value);
+        alert("Account created — logged in!");
+      } catch (err) { alert(err.message); }
+    };
+    window.logout = async () => { await signOut(auth); };
+
+    // --- Auth State Listener ---
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        loggedOut.style.display = "none";
+        loggedIn.style.display = "block";
+        userEmail.textContent = user.email;
+        document.querySelector("main").style.display = "block";
+        loadParts();
+        loadSystems();
+      } else {
+        loggedOut.style.display = "block";
+        loggedIn.style.display = "none";
+        document.querySelector("main").style.display = "none";
+      }
+    });
+
+    // --- Modal logic ---
     const modal = document.getElementById("addPartModal");
     window.openModal = () => modal.style.display = "flex";
     window.closeModal = () => modal.style.display = "none";
 
-    // ----- Add new part -----
+    // --- Firestore operations ---
     window.addPart = async function() {
-      const name = document.getElementById("partName").value.trim();
-      const brand = document.getElementById("partBrand").value.trim();
-      const category = document.getElementById("partCategory").value;
-      const price = parseFloat(document.getElementById("partPrice").value);
-      const perf = parseFloat(document.getElementById("partPerf").value);
-
-      if (!name || !brand || !category || isNaN(price)) {
-        alert("Please fill out all required fields.");
-        return;
-      }
-
+      const name = partName.value.trim();
+      const brand = partBrand.value.trim();
+      const category = partCategory.value;
+      const price = parseFloat(partPrice.value);
+      const perf = parseFloat(partPerf.value);
+      if (!name || !brand || !category || isNaN(price)) { alert("Missing fields"); return; }
       await addDoc(collection(db, "parts"), {
         name, brand, category, price, perf_score: perf || 0,
-        in_stock: true,
-        added_at: new Date().toISOString()
+        in_stock: true, added_at: new Date().toISOString()
       });
-
-      alert("✅ Part added successfully!");
-      modal.style.display = "none";
+      alert("✅ Part added!");
+      closeModal();
       loadParts();
     };
 
-    // ----- Load and display parts -----
     async function loadParts() {
-      const snapshot = await getDocs(collection(db, "parts"));
-      const tbody = document.getElementById("partsTableBody");
-      tbody.innerHTML = "";
-      snapshot.forEach(doc => {
+      const snap = await getDocs(collection(db, "parts"));
+      const body = document.getElementById("partsTableBody");
+      body.innerHTML = "";
+      snap.forEach(doc => {
         const p = doc.data();
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${p.name}</td>
-          <td>${p.brand}</td>
-          <td>${p.category}</td>
-          <td>$${p.price}</td>
-          <td>${p.perf_score || "-"}</td>
-        `;
-        tbody.appendChild(row);
+        body.innerHTML += `<tr><td>${p.name}</td><td>${p.brand}</td><td>${p.category}</td><td>$${p.price}</td><td>${p.perf_score||"-"}</td></tr>`;
       });
     }
-    loadParts();
 
-    // ----- Auto Build -----
+    async function loadSystems() {
+      const snap = await getDocs(collection(db, "systems"));
+      const body = document.getElementById("systemsTableBody");
+      body.innerHTML = "";
+      snap.forEach(doc => {
+        const s = doc.data();
+        body.innerHTML += `<tr><td>${s.name}</td><td>${s.tier}</td><td>$${s.budget}</td><td>$${s.total_price.toFixed(2)}</td></tr>`;
+      });
+    }
+
+    // --- Build / Save System ---
+    let currentBuild = null;
     window.autoBuild = async function() {
-      const budget = parseFloat(document.getElementById("budget").value) || 1500;
+      const tier = parseInt(systemTier.value);
+      const budget = parseFloat(budget.value) || 1500;
       const partsSnap = await getDocs(collection(db, "parts"));
       const parts = [];
-      partsSnap.forEach((doc) => parts.push(doc.data()));
+      partsSnap.forEach((d)=>parts.push(d.data()));
 
-      const categories = ["cpu", "gpu", "ram", "storage", "case", "psu"];
-      let selected = {};
-      let total = 0;
-
-      categories.forEach(cat => {
-        const candidates = parts.filter(p => p.category === cat);
-        if (candidates.length) {
-          const best = candidates.sort((a, b) => b.perf_score - a.perf_score)[0];
-          selected[cat] = best.name;
-          total += best.price;
+      const cats = ["cpu","gpu","ram","storage","case","psu"];
+      let selected = {}, total = 0;
+      cats.forEach(cat=>{
+        const cand = parts.filter(p=>p.category===cat);
+        if(cand.length){ const best = cand.sort((a,b)=>b.perf_score-a.perf_score)[0];
+          selected[cat] = best.name; total += best.price;
         }
       });
-
-      const output = document.getElementById("buildOutput");
-      output.innerHTML = `
+      currentBuild = {tier,budget,parts:selected,total};
+      buildOutput.innerHTML = `
         <h3>System Build</h3>
-        <pre>${JSON.stringify(selected, null, 2)}</pre>
-        <p><strong>Total:</strong> $${total.toFixed(2)}</p>
-        <p><strong>Budget:</strong> $${budget}</p>
-      `;
+        <pre>${JSON.stringify(selected,null,2)}</pre>
+        <p><strong>Total:</strong> $${total.toFixed(2)}</p>`;
+      saveSystemBtn.style.display="inline-block";
+    };
+
+    window.saveSystem = async function(){
+      if(!currentBuild){ alert("Build first"); return; }
+      const name = prompt("Name this build:", "Custom System");
+      if(!name) return;
+      await addDoc(collection(db, "systems"), {
+        name,
+        tier: currentBuild.tier,
+        budget: currentBuild.budget,
+        parts: currentBuild.parts,
+        total_price: currentBuild.total,
+        created_at: new Date().toISOString()
+      });
+      alert("✅ System saved!");
+      saveSystemBtn.style.display="none";
+      currentBuild=null;
+      loadSystems();
     };
   </script>
 </body>
