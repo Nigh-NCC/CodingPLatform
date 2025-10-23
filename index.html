@@ -3,606 +3,90 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HRG PC Builder — Manage Parts</title>
+  <title>HRG PC Builder – Live Inventory & Quotes</title>
   <style>
-    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;background:#0f1115;color:#e6e9ef;margin:0;padding:24px}
-    .btn{padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;transition:.2s;background:#1b2030;color:#fff}
-    .btn:hover{background:#2a3145}
-    .primary{background:linear-gradient(90deg,#4c6fff,#7aa2ff)}
-    .ghost{background:#1b2030}
-    .tiny{font-size:12px;color:#aab1c4}
-    input,select{width:100%;padding:8px 10px;margin-bottom:10px;border-radius:8px;border:1px solid #2a3042;background:#151823;color:#e6e9ef}
-    label{font-size:13px;color:#aab1c4}
-    #partModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);justify-content:center;align-items:center;z-index:9999}
-    #partModal .inner{background:#151823;padding:24px;border-radius:16px;max-width:550px;width:90%;max-height:90%;overflow:auto}
-    .row{display:flex;gap:8px}
+    body {
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Helvetica Neue, Arial, sans-serif;
+      background: #0f1115;
+      color: #e6e9ef;
+      margin: 0;
+      padding: 24px;
+    }
+    h1 { margin-top: 0; }
+    .btn { padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+    .primary { background: linear-gradient(90deg,#4c6fff,#7aa2ff); color: #fff; }
+    .ghost { background: #1b2030; color: #fff; }
+    input, select {
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      border: 1px solid #2a3042;
+      background: #151823;
+      color: #e6e9ef;
+    }
+    label { font-size: 13px; color: #aab1c4; display: block; margin-top: 6px; }
+    .tiny { font-size: 12px; color: #aab1c4; }
   </style>
 </head>
 <body>
-  <h1>HRG PC Builder — Manage Parts</h1>
-  <button id="btnManageParts" class="btn ghost">Manage Parts</button>
+  <h1>HRG PC Builder – Live Inventory & Quotes</h1>
+  <p class="tiny">Firebase and live pricing backend are pre-configured.</p>
 
-  <!-- Modal for Managing Parts -->
-  <div id="partModal">
-    <div class="inner">
-      <h2>Add / Edit / Delete Part</h2>
-      <form id="partForm">
-        <label>Category</label>
-        <select id="partCategory" required>
-          <option value="">Select</option>
-          <option value="cpu">CPU</option>
-          <option value="gpu">GPU</option>
-          <option value="mb">Motherboard</option>
-          <option value="ram">RAM</option>
-          <option value="storage">Storage</option>
-          <option value="psu">Power Supply</option>
-          <option value="cooler">Cooler</option>
-          <option value="case">Case</option>
-        </select>
-
-        <label>Brand</label>
-        <input id="partBrand" type="text" required>
-
-        <label>Model</label>
-        <input id="partModel" type="text" required>
-
-        <label>SKU (Unique ID)</label>
-        <input id="partSku" type="text" required>
-
-        <label>Production Year</label>
-        <input id="partYear" type="number" min="2000" max="2030" value="2025">
-
-        <label>Price (USD)</label>
-        <input id="partPrice" type="number" step="0.01" required>
-
-        <label>Performance (0–100)</label>
-        <input id="partPerf" type="number" min="0" max="100" required>
-
-        <div id="extraFields"></div>
-
-        <label>Upload Image</label>
-        <input id="partImage" type="file" accept="image/*">
-
-        <div class="row" style="justify-content:flex-end;">
-          <button type="button" id="btnLoadPart" class="btn ghost">Load by SKU</button>
-          <button type="button" id="btnDeletePart" class="btn ghost">Delete</button>
-          <button type="button" id="btnCloseModal" class="btn ghost">Cancel</button>
-          <button type="submit" class="btn primary">Save</button>
-        </div>
-      </form>
-      <div id="modalStatus" class="tiny" style="margin-top:8px"></div>
-    </div>
-  </div>
+  <button id="btnTest" class="btn primary">Test Connection</button>
+  <pre id="output" style="margin-top:16px;background:#151823;padding:12px;border-radius:8px;"></pre>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 
   <script>
-  const firebaseConfig = { /* your config here */ };
-  firebase.initializeApp(firebaseConfig);
+  // ---------- Firebase Config (baked in) ----------
+  const firebaseConfig = {
+    apiKey: "AIzaSyCVXsMYLXlGrAuLWFnLe21IfV2a_vLdi-o",
+    authDomain: "hrg-pc-build.firebaseapp.com",
+    projectId: "hrg-pc-build",
+    storageBucket: "hrg-pc-build.firebasestorage.app",
+    messagingSenderId: "846697611824",
+    appId: "1:846697611824:web:eb58f939302d1b230ba3f5"
+  };
+
+  // ---------- Safe Initialization ----------
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  } else {
+    firebase.app();
+  }
+
   const db = firebase.firestore();
   const storage = firebase.storage();
 
-  const modal = document.getElementById('partModal');
-  const btnOpen = document.getElementById('btnManageParts');
-  const btnClose = document.getElementById('btnCloseModal');
-  const form = document.getElementById('partForm');
-  const statusEl = document.getElementById('modalStatus');
-  const catSel = document.getElementById('partCategory');
-  const extraFields = document.getElementById('extraFields');
+  // ---------- Cloud Function Endpoints ----------
+  const FN_PRICE = "https://us-central1-hrg-pc-build.cloudfunctions.net/priceSync";
+  const FN_SUGGEST = "https://us-central1-hrg-pc-build.cloudfunctions.net/stockSuggest";
+  const FN_RESERVE = "https://us-central1-hrg-pc-build.cloudfunctions.net/reservePart";
 
-  btnOpen.onclick = ()=>{modal.style.display='flex';statusEl.textContent=''};
-  btnClose.onclick = ()=>{modal.style.display='none'};
+  // ---------- Quick test ----------
+  document.getElementById("btnTest").onclick = async () => {
+    const out = document.getElementById("output");
+    out.textContent = "Testing connection...";
 
-  catSel.addEventListener('change', ()=>{
-    const cat = catSel.value; extraFields.innerHTML='';
-    const addField = (id,label,type='text',min,max)=>{
-      const l=document.createElement('label');l.textContent=label;
-      const i=document.createElement('input');i.id=id;i.type=type;if(min)i.min=min;if(max)i.max=max;
-      extraFields.appendChild(l);extraFields.appendChild(i);
-    };
-    if(cat==='gpu'){ addField('vram_gb','VRAM (GB)','number'); addField('length_mm','Length (mm)','number'); addField('tdp','TDP (W)','number'); }
-    if(cat==='cpu'){ addField('socket','Socket'); addField('cores','Cores','number'); addField('threads','Threads','number'); }
-    if(cat==='ram'){ addField('capacity_gb','Capacity (GB)','number'); addField('speed_mhz','Speed (MHz)','number'); addField('type','Type'); }
-    if(cat==='storage'){ addField('capacity_gb','Capacity (GB)','number'); addField('type','Type'); addField('read_mbps','Read (MB/s)','number'); }
-    if(cat==='psu'){ addField('watt','Wattage','number'); addField('efficiency','Efficiency'); addField('form','Form'); }
-    if(cat==='cooler'){ addField('type','Type'); addField('height_mm','Height (mm)','number'); }
-    if(cat==='case'){ addField('form','Form'); addField('gpu_max_mm','GPU Max (mm)','number'); addField('cooler_max_mm','Cooler Max (mm)','number'); }
-  });
-
-  form.addEventListener('submit', async(e)=>{
-    e.preventDefault();
-    const data={
-      category:catSel.value,
-      brand:partBrand.value,
-      model:partModel.value,
-      sku:partSku.value.trim(),
-      production_year:Number(partYear.value),
-      price_usd:Number(partPrice.value),
-      perf:Number(partPerf.value),
-      updated_at:new Date().toISOString()
-    };
-    // merge extra fields
-    extraFields.querySelectorAll('input').forEach(f=>{if(f.value) data[f.id]=isNaN(f.value)?f.value:Number(f.value)});
-    try{
-      // upload image if provided
-      const file=document.getElementById('partImage').files[0];
-      if(file){
-        const ref=storage.ref().child(`parts/${data.sku}/${file.name}`);
-        await ref.put(file);
-        data.image_url=await ref.getDownloadURL();
-      }
-      await db.collection('parts').doc(data.sku).set(data,{merge:true});
-      statusEl.textContent=`✅ ${data.sku} saved.`;
-      form.reset(); extraFields.innerHTML='';
-    }catch(err){statusEl.textContent='❌ '+err.message;}
-  });
-
-  document.getElementById('btnLoadPart').onclick=async()=>{
-    const sku=partSku.value.trim();if(!sku){statusEl.textContent='Enter SKU';return;}
-    const doc=await db.collection('parts').doc(sku).get();
-    if(doc.exists){
-      const d=doc.data();
-      catSel.value=d.category;partBrand.value=d.brand||'';partModel.value=d.model||'';
-      partYear.value=d.production_year||2025;partPrice.value=d.price_usd||'';partPerf.value=d.perf||'';
-      catSel.dispatchEvent(new Event('change'));
-      for(const k in d){if(extraFields.querySelector(`#${k}`))extraFields.querySelector(`#${k}`).value=d[k];}
-      statusEl.textContent=`✅ Loaded ${sku}`;
-    }else statusEl.textContent='❌ Not found';
-  };
-
-  document.getElementById('btnDeletePart').onclick=async()=>{
-    const sku=partSku.value.trim();if(!sku)return alert('Enter SKU first');
-    if(confirm(`Delete ${sku}?`)){
-      await db.collection('parts').doc(sku).delete();
-      statusEl.textContent=`🗑️ Deleted ${sku}`;
-      form.reset(); extraFields.innerHTML='';
+    try {
+      // simple Firestore test
+      const testDoc = await db.collection("parts").limit(1).get();
+      const count = testDoc.size;
+      // simple backend test
+      const res = await fetch(FN_PRICE + "?sku=RTX_4070_SUPER");
+      const text = await res.text();
+      out.textContent =
+        "✅ Firebase Initialized\n" +
+        "✅ Firestore Connected (found " + count + " docs)\n" +
+        "✅ Function Response (priceSync):\n" + text;
+    } catch (err) {
+      out.textContent = "❌ Error: " + err.message;
+      console.error(err);
     }
   };
-  </script>
-</body>
-</html>
-    table{width:100%;border-collapse:separate;border-spacing:0 8px}
-    th,td{padding:10px 12px;text-align:left;font-size:14px}
-    thead th{color:var(--sub);font-weight:500}
-    tbody tr{background:#0c111a;border:1px solid var(--muted)}
-    tbody tr td{border-top:1px solid var(--muted);border-bottom:1px solid var(--muted)}
-    tbody tr td:first-child{border-left:1px solid var(--muted);border-top-left-radius:10px;border-bottom-left-radius:10px}
-    tbody tr td:last-child{border-right:1px solid var(--muted);border-top-right-radius:10px;border-bottom-right-radius:10px}
-    .status{font-size:12px}
-    .status.good{color:var(--good)}
-    .status.warn{color:var(--warn)}
-    .status.bad{color:var(--bad)}
-    .mono{font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
-    .muted{color:var(--sub)}
-    .divider{height:1px;background:linear-gradient(90deg,transparent,#2a3042,transparent);margin:16px 0}
-    .tiny{font-size:11px;color:var(--sub)}
-    .sticky-actions{position:sticky;bottom:0;padding:10px;background:linear-gradient(180deg,transparent,rgba(15,17,21,.9) 35%);backdrop-filter:blur(4px)}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header class="card">
-      <div class="row" style="align-items:flex-start">
-        <div style="flex:2">
-          <h1>HRG PC Builder <span class="tag mono">alpha</span></h1>
-          <div class="muted">Private PCPartPicker for Howard Resource Group — tier-aware, budget-driven, with live pricing hooks.</div>
-        </div>
-        <div class="row" style="flex:1;justify-content:flex-end">
-          <button id="btnExportCSV" class="btn ghost">Export CSV</button>
-          <button id="btnSaveLocal" class="btn ghost">Download Build (.json)</button>
-          <button id="btnLoadLocal" class="btn ghost">Load Build</button>
-          <button id="btnRefreshPrices" class="btn primary">Refresh Prices</button>
-        </div>
-      </div>
-    </header>
-
-    <section class="grid cols-3">
-      <div class="card">
-        <label for="tierSelect">Tier</label>
-        <select id="tierSelect"></select>
-        <div id="tierDesc" class="tiny" style="margin-top:8px"></div>
-        <div style="margin-top:10px" class="tiny">Eligibility: <span id="tierEligibility" class="pill">—</span></div>
-      </div>
-
-      <div class="card">
-        <label for="budgetRange">Budget</label>
-        <div class="row">
-          <input id="budgetRange" type="range" min="600" max="7000" step="50" />
-          <input id="budgetInput" type="number" min="300" max="10000" step="50" />
-        </div>
-        <div class="kpis" style="margin-top:10px">
-          <div class="kpi"><div class="label">Allocated to CPU</div><div class="value" id="kpiCPU">—</div></div>
-          <div class="kpi"><div class="label">Allocated to GPU</div><div class="value" id="kpiGPU">—</div></div>
-          <div class="kpi"><div class="label">Headroom (PSU/Cooling)</div><div class="value" id="kpiHead">—</div></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="grid cols-2">
-          <div>
-            <label for="markupPct">Markup %</label>
-            <input id="markupPct" type="number" min="0" max="50" step="0.5" value="12" />
-          </div>
-          <div>
-            <label for="assemblyFee">Assembly Fee ($)</label>
-            <input id="assemblyFee" type="number" min="0" step="10" value="150" />
-          </div>
-          <div>
-            <label for="taxPct">Sales Tax %</label>
-            <input id="taxPct" type="number" min="0" step="0.1" value="0" />
-          </div>
-          <div>
-            <label for="pricingMode">Pricing Mode</label>
-            <select id="pricingMode">
-              <option value="live">Live (cached ≤24h)</option>
-              <option value="cached" selected>Cached (Firestore)</option>
-              <option value="manual">Manual / Demo Data</option>
-            </select>
-          </div>
-        </div>
-        <div class="tiny" style="margin-top:8px">Markup is applied to parts subtotal (not tax). Assembly fee added post‑markup.</div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Requirements</h2>
-      <div class="row">
-        <label class="pill"><input id="reqWifi" type="checkbox" checked> Wi‑Fi</label>
-        <label class="pill"><input id="reqRGB" type="checkbox"> RGB Preference</label>
-        <label class="pill"><input id="reqLiquid" type="checkbox"> Liquid Cooling</label>
-        <label class="pill"><input id="reqSFF" type="checkbox"> Small Form Factor</label>
-        <label class="pill"><input id="reqSilent" type="checkbox"> Quiet / Low Noise</label>
-        <label class="pill"><input id="reqNvme" type="checkbox" checked> NVMe Boot</label>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Suggested Build</h2>
-      <div class="divider"></div>
-      <table>
-        <thead>
-          <tr>
-            <th style="width:18%">Category</th>
-            <th>Part</th>
-            <th style="width:12%">Price</th>
-            <th style="width:14%">Compat</th>
-            <th style="width:16%">Notes</th>
-          </tr>
-        </thead>
-        <tbody id="buildRows"></tbody>
-      </table>
-
-      <div class="divider"></div>
-      <div class="kpis">
-        <div class="kpi"><div class="label">Parts Subtotal</div><div class="value" id="kpiParts">—</div></div>
-        <div class="kpi"><div class="label">+ Markup</div><div class="value" id="kpiMarkup">—</div></div>
-        <div class="kpi"><div class="label">+ Assembly</div><div class="value" id="kpiAssembly">—</div></div>
-        <div class="kpi"><div class="label">Pre‑Tax Total</div><div class="value" id="kpiPretax">—</div></div>
-        <div class="kpi"><div class="label">+ Tax</div><div class="value" id="kpiTax">—</div></div>
-        <div class="kpi"><div class="label">Out‑the‑Door</div><div class="value" id="kpiOtd">—</div></div>
-      </div>
-
-      <div class="sticky-actions row" style="justify-content:flex-end;margin-top:10px">
-        <button id="btnAutoBuild" class="btn primary">Auto‑Build from Tier + Budget</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Data & Integrations</h2>
-      <div class="tiny">This page can use <strong>Firestore</strong> for cached pricing and a Cloud Function that synchronizes with PCPartPicker / vendors. Fill your config below.</div>
-      <div class="grid cols-2" style="margin-top:10px">
-        <div>
-          <label>Firebase Config (paste yours)</label>
-          <textarea id="fbConfig" rows="6" style="width:100%;background:#0e111a;color:var(--text);border:1px solid var(--muted);border-radius:10px;padding:10px" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
-          <div class="row" style="margin-top:8px"><button id="btnInitFb" class="btn ghost">Init Firebase</button><span id="fbStatus" class="tiny">Not initialized.</span></div>
-        </div>
-        <div>
-          <label>Cloud Function Endpoint (price sync proxy)</label>
-          <input id="fnEndpoint" placeholder="https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/priceSync" />
-          <div class="tiny" style="margin-top:6px">Expected GET/POST signature: <span class="mono">/priceSync?sku=RTX_4080_SUPER</span> or <span class="mono">/priceSync?category=gpu</span>. Returns JSON with <span class="mono">price_usd, vendor, url, updated_at</span>.</div>
-        </div>
-      </div>
-    </section>
-  </div>
-
-  <!-- Firebase SDKs (compat for ease). Remove if you bundle elsewhere. -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-
-  <script>
-  /**************
-   * Tier Model *
-   **************/
-  const TIERS = [
-    { id:1, key:'sff_king', name:'SFF King', desc:'Small, durable, portable, efficient.', badge:'SFF', budget:[1200,4000], alloc:{cpu:.26,gpu:.34,mb:.10,ram:.07,storage:.10,psu:.07,cooler:.04,case:.02}, constraints:{sff:true, itx:true}},
-    { id:2, key:'mini_itx_masterpiece', name:'Mini‑ITX Masterpiece', desc:'Mini‑ITX powerhouse + custom styling.', badge:'Mini‑ITX', budget:[1500,5000], alloc:{cpu:.24,gpu:.38,mb:.09,ram:.07,storage:.09,psu:.06,cooler:.05,case:.02}, constraints:{itx:true, styling:true}},
-    { id:3, key:'gaming_perf', name:'Gaming PC — Performance', desc:'1080p/1440p high FPS.', badge:'Gaming', budget:[1200,3000], alloc:{cpu:.22,gpu:.42,mb:.09,ram:.07,storage:.08,psu:.07,cooler:.03,case:.02}, constraints:{}},
-    { id:4, key:'gaming_creator', name:'Gaming PC — Creator', desc:'Gaming + creative workloads.', badge:'Gaming/Creator', budget:[1500,3800], alloc:{cpu:.26,gpu:.38,mb:.09,ram:.09,storage:.08,psu:.06,cooler:.03,case:.01}, constraints:{}, flags:{more_ram:true}},
-    { id:5, key:'gaming_master', name:'Gaming PC — Master', desc:'4K / max‑settings monster.', badge:'Gaming', budget:[2200,6000], alloc:{cpu:.24,gpu:.46,mb:.08,ram:.07,storage:.06,psu:.05,cooler:.03,case:.01}, constraints:{}},
-    { id:6, key:'the_thinker', name:'The Thinker', desc:'AI / heavy CPU compute.', badge:'AI/CPU', budget:[1800,6000], alloc:{cpu:.36,gpu:.24,mb:.10,ram:.12,storage:.08,psu:.06,cooler:.03,case:.01}, constraints:{ecc_ok:true}},
-    { id:7, key:'stylistic_intrinsic', name:'Stylistic Intrinsic', desc:'Sleeper: minimal exterior, beautiful internals.', badge:'Sleeper', budget:[1400,4200], alloc:{cpu:.25,gpu:.35,mb:.10,ram:.08,storage:.08,psu:.06,cooler:.05,case:.03}, constraints:{minimal_case:true, rgb:false}},
-    { id:8, key:'stylistic_extrinsic', name:'Stylistic Extrinsic', desc:'Hidden cables + beautiful lit exterior.', badge:'Showcase', budget:[1600,4800], alloc:{cpu:.23,gpu:.37,mb:.09,ram:.08,storage:.08,psu:.06,cooler:.05,case:.04}, constraints:{rgb:true, glass_ok:true}},
-    { id:9, key:'the_beginner', name:'The Beginner', desc:'First‑time buyers; modular, easy upgrades.', badge:'Beginner', budget:[700,1600], alloc:{cpu:.25,gpu:.30,mb:.12,ram:.10,storage:.10,psu:.08,cooler:.03,case:.02}, constraints:{tool_less:true}, eligibility:'Eligible for 5% Upgrade Program discount.'},
-    { id:10, key:'upgrade_program', name:'Upgrade Program', desc:'Program for Tier 9: swap/refresh machines with fees or auto‑refresh @ 24 months (experimental).', badge:'Program', budget:[0,0], alloc:{}, constraints:{program:true}}
-  ];
-
-  // Populate tier selector
-  const tierSelect = document.getElementById('tierSelect');
-  TIERS.forEach(t=>{
-    const opt = document.createElement('option');
-    opt.value=t.key; opt.textContent=`${t.id}. ${t.name}`; tierSelect.appendChild(opt);
-  });
-  tierSelect.value = 'gaming_perf';
-
-  const el = (id)=>document.getElementById(id);
-
-  const budgetRange = el('budgetRange');
-  const budgetInput = el('budgetInput');
-  const markupPct = el('markupPct');
-  const assemblyFee = el('assemblyFee');
-  const taxPct = el('taxPct');
-  const pricingMode = el('pricingMode');
-
-  // init defaults
-  budgetRange.value = 1800; budgetInput.value = 1800;
-
-  // sync range & number
-  budgetRange.addEventListener('input', e=>{budgetInput.value=e.target.value; updateAllocUI();});
-  budgetInput.addEventListener('input', e=>{budgetRange.value=e.target.value; updateAllocUI();});
-  tierSelect.addEventListener('change', ()=>{applyTierDefaults(); updateAllocUI();});
-
-  function fmt(n){return `$${Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0})}`}
-
-  function getTier(){return TIERS.find(t=>t.key===tierSelect.value)}
-
-  function applyTierDefaults(){
-    const t = getTier();
-    el('tierDesc').textContent = t?.desc || '';
-    el('tierEligibility').textContent = t?.eligibility || '—';
-    if(t && t.budget?.length===2){
-      budgetRange.min=t.budget[0]; budgetRange.max=t.budget[1];
-      budgetInput.min=t.budget[0]; budgetInput.max=t.budget[1];
-      // clamp current value
-      let v = Number(budgetInput.value||0); v=Math.min(Math.max(v,t.budget[0]), t.budget[1]||v);
-      budgetRange.value=v; budgetInput.value=v;
-    }
-  }
-
-  function updateAllocUI(){
-    const t = getTier(); if(!t||!t.alloc) return;
-    const budget = Number(budgetInput.value||0);
-    el('kpiCPU').textContent = fmt(budget * (t.alloc.cpu||0));
-    el('kpiGPU').textContent = fmt(budget * (t.alloc.gpu||0));
-    el('kpiHead').textContent = fmt(budget * ((t.alloc.psu||0)+(t.alloc.cooler||0)));
-  }
-
-  applyTierDefaults(); updateAllocUI();
-
-  /*********************
-   * Demo / Fallback DB *
-   *********************/
-  // Minimal demo dataset used when pricingMode === 'manual' or Firestore not ready
-  const DEMO_PARTS = [
-    {category:'cpu', sku:'RY7_7800X3D', name:'AMD Ryzen 7 7800X3D', socket:'AM5', tdp:120, price_usd:369, perf:95},
-    {category:'cpu', sku:'I5_13600K', name:'Intel Core i5‑13600K', socket:'LGA1700', tdp:181, price_usd:289, perf:85},
-    {category:'gpu', sku:'RTX_4070_SUPER', name:'NVIDIA GeForce RTX 4070 SUPER 12GB', length_mm:267, price_usd:579, perf:88},
-    {category:'gpu', sku:'RTX_4080_SUPER', name:'NVIDIA GeForce RTX 4080 SUPER 16GB', length_mm:304, price_usd:1199, perf:97},
-    {category:'mb',  sku:'ASUS_X670E_ITX', name:'ASUS ROG Strix X670E‑I Gaming (Mini‑ITX)', socket:'AM5', form:'Mini‑ITX', price_usd:389},
-    {category:'mb',  sku:'MSI_B760_TOMA', name:'MSI B760 Tomahawk WiFi (ATX)', socket:'LGA1700', form:'ATX', price_usd:189},
-    {category:'ram', sku:'DDR5_32_6000', name:'32GB (2x16) DDR5‑6000', type:'DDR5', price_usd:115},
-    {category:'ram', sku:'DDR5_64_6000', name:'64GB (2x32) DDR5‑6000', type:'DDR5', price_usd:225},
-    {category:'storage', sku:'SN850X_2TB', name:'WD Black SN850X 2TB NVMe', type:'NVMe', price_usd:169},
-    {category:'psu', sku:'SF750', name:'Corsair SF750 (SFX, 80+ Gold)', watt:750, form:'SFX', price_usd:169},
-    {category:'psu', sku:'RM850e', name:'Corsair RM850e (ATX 3.0, 80+ Gold)', watt:850, form:'ATX', price_usd:129},
-    {category:'cooler', sku:'NH_L12S', name:'Noctua NH‑L12S (SFF low‑profile)', type:'air', height_mm:70, price_usd:69},
-    {category:'cooler', sku:'LS120', name:'Lian Li Galahad II 240 AIO', type:'aio240', height_mm:0, price_usd:109},
-    {category:'case', sku:'NR200P', name:'Cooler Master NR200P (Mini‑ITX)', form:'Mini‑ITX', gpu_max:330, cooler_max:155, price_usd:99},
-    {category:'case', sku:'LianLi_O11D', name:'Lian Li O11 Dynamic', form:'ATX', gpu_max:420, cooler_max:170, price_usd:139},
-  ];
-
-  /********************
-   * Firestore Helpers *
-   ********************/
-  let fb = {app:null, db:null};
-  el('btnInitFb').addEventListener('click', ()=>{
-    try{
-      const cfg = JSON.parse(el('fbConfig').value || '{}');
-      fb.app = firebase.initializeApp(cfg);
-      fb.db = firebase.firestore();
-      el('fbStatus').textContent = 'Initialized ✅';
-    }catch(err){
-      console.error(err); el('fbStatus').textContent = 'Init failed ❌';
-    }
-  });
-
-  async function getPartsFromFirestore(category){
-    if(!fb.db) return [];
-    try{
-      const snap = await fb.db.collection('parts').where('category','==',category).get();
-      return snap.docs.map(d=>({id:d.id, ...d.data()}));
-    }catch(e){ console.warn('FS read failed', e); return []; }
-  }
-
-  async function getParts(category){
-    const mode = pricingMode.value;
-    if(mode==='manual') return DEMO_PARTS.filter(p=>p.category===category);
-    if(mode==='cached'){
-      const fs = await getPartsFromFirestore(category);
-      return fs.length? fs : DEMO_PARTS.filter(p=>p.category===category);
-    }
-    if(mode==='live'){
-      // Try cloud function first; fallback to FS/demo
-      const ep = el('fnEndpoint').value?.trim();
-      try{
-        if(ep){
-          const res = await fetch(`${ep}?category=${encodeURIComponent(category)}`);
-          if(res.ok){ const data = await res.json(); if(Array.isArray(data) && data.length) return data; }
-        }
-      }catch(e){ console.warn('Live fetch failed, falling back', e); }
-      const fs = await getPartsFromFirestore(category);
-      return fs.length? fs : DEMO_PARTS.filter(p=>p.category===category);
-    }
-    return DEMO_PARTS.filter(p=>p.category===category);
-  }
-
-  /********************
-   * Build Engine v0.3 *
-   ********************/
-  const CATS = ['cpu','gpu','mb','ram','storage','psu','cooler','case'];
-
-  function estWattage(parts){
-    const cpu = parts.cpu?.tdp||95; const gpu = (parts.gpu?.tdp||250);
-    const other = 75; return cpu + gpu + other; // very rough
-  }
-
-  function compatibleScore(cat, candidate, picked){
-    // return {ok:boolean, reason:string}
-    const bad = (r)=>({ok:false, reason:r});
-    const ok = ()=>({ok:true, reason:'OK'});
-    const cpu = picked.cpu; const mb = picked.mb; const gpu = picked.gpu; const kase = picked.case;
-
-    if(cat==='mb' && picked.cpu){ if(candidate.socket && cpu.socket && candidate.socket!==cpu.socket) return bad('Socket mismatch'); }
-    if(cat==='cpu' && picked.mb){ if(candidate.socket && mb.socket && candidate.socket!==mb.socket) return bad('Socket mismatch'); }
-    if(cat==='ram' && picked.mb){ /* if DDR gen mismatch */ if(candidate.type && picked.mb.ram_type && candidate.type!==picked.mb.ram_type) return bad('RAM type mismatch'); }
-    if(cat==='gpu' && picked.case){ if(kase.gpu_max && candidate.length_mm && candidate.length_mm>kase.gpu_max) return bad('GPU too long'); }
-    if(cat==='cooler' && picked.case){ if(kase.cooler_max && candidate.height_mm && candidate.height_mm>kase.cooler_max) return bad('Cooler too tall'); }
-    if(cat==='psu'){
-      const need = estWattage({...picked, [cat]:candidate});
-      if(candidate.watt && candidate.watt < Math.ceil(need*1.3)) return bad('Wattage too low (<30% headroom)');
-    }
-    return ok();
-  }
-
-  async function autoBuild(){
-    const tier = getTier(); const budget = Number(budgetInput.value||0);
-    const alloc = tier.alloc||{}; const picked = {};
-
-    for(const cat of CATS){
-      const parts = await getParts(cat);
-      const allow = Math.max(1, Math.floor(budget*(alloc[mapCatToAllocKey(cat)]||0.05)));
-      // Prefer highest perf under budget; if none, take cheapest compatible
-      let best=null, cheapest=null;
-      for(const p of parts){
-        const price = Number(p.price_usd||p.price||0);
-        const score = compatibleScore(cat, p, picked);
-        if(!score.ok) continue;
-        if(!cheapest || price < (cheapest.price_usd||cheapest.price)) cheapest = p;
-        if(price <= allow){
-          if(!best || (Number(p.perf||0) > Number(best.perf||0))) best = p;
-        }
-      }
-      picked[cat] = best || cheapest || parts[0] || null;
-    }
-
-    renderBuild(picked);
-  }
-
-  function mapCatToAllocKey(cat){
-    return ({cpu:'cpu', gpu:'gpu', mb:'mb', ram:'ram', storage:'storage', psu:'psu', cooler:'cooler', case:'case'})[cat] || 'misc';
-  }
-
-  function renderBuild(parts){
-    const tbody = el('buildRows'); tbody.innerHTML='';
-    let subtotal = 0; const issues=[];
-
-    for(const cat of CATS){
-      const p = parts[cat];
-      const tr = document.createElement('tr');
-      const price = Number(p?.price_usd||p?.price||0);
-      subtotal += (isFinite(price)? price:0);
-
-      let comp = compatibleScore(cat, p||{}, parts);
-      tr.innerHTML = `
-        <td class="mono">${cat.toUpperCase()}</td>
-        <td>${p? (p.name || p.sku || '—') : '—'}<div class="tiny">${p?.sku||''}</div></td>
-        <td class="mono">${p? fmt(price):'—'}</td>
-        <td class="status ${comp.ok?'good':'warn'}">${comp.reason}</td>
-        <td class="tiny">${notesFor(cat, p)||''}</td>`;
-      tbody.appendChild(tr);
-      if(!comp.ok) issues.push(`${cat}: ${comp.reason}`);
-    }
-
-    const markupAmt = subtotal * (Number(markupPct.value||0)/100);
-    const preAssembly = subtotal + markupAmt;
-    const preTax = preAssembly + Number(assemblyFee.value||0);
-    const taxAmt = preTax * (Number(taxPct.value||0)/100);
-    const otd = preTax + taxAmt;
-
-    el('kpiParts').textContent = fmt(subtotal);
-    el('kpiMarkup').textContent = fmt(markupAmt);
-    el('kpiAssembly').textContent = fmt(Number(assemblyFee.value||0));
-    el('kpiPretax').textContent = fmt(preTax);
-    el('kpiTax').textContent = fmt(taxAmt);
-    el('kpiOtd').textContent = fmt(otd);
-
-    if(getTier().id===9){
-      el('tierEligibility').textContent = 'Eligible for 5% Upgrade Program discount (Tier 9).';
-    }
-  }
-
-  function notesFor(cat, p){
-    const t = getTier();
-    const rgb = el('reqRGB').checked; const sff = el('reqSFF').checked; const liquid = el('reqLiquid').checked; const silent = el('reqSilent').checked;
-    const hints=[];
-    if(!p) return '';
-    if(cat==='case' && sff) hints.push('SFF preferred');
-    if(cat==='cooler' && liquid) hints.push('Liquid cooling preferred');
-    if(rgb && (cat==='case' || cat==='cooler' || cat==='ram')) hints.push('RGB OK');
-    if(silent && (cat==='cooler')) hints.push('Low‑noise');
-    if(t.id===6 && cat==='ram') hints.push('Consider 64‑128GB');
-    if(t.key==='gaming_creator' && cat==='storage') hints.push('Prefer 2TB+ NVMe');
-    return hints.join(' · ');
-  }
-
-  // Wire buttons
-  el('btnAutoBuild').addEventListener('click', autoBuild);
-  el('btnRefreshPrices').addEventListener('click', async()=>{
-    // naive refresh: hit function for each category to warm cache
-    const ep = el('fnEndpoint').value?.trim(); if(!ep){ alert('Set Cloud Function endpoint first.'); return; }
-    for(const c of CATS){ try{ await fetch(`${ep}?category=${encodeURIComponent(c)}`);}catch(e){} }
-    alert('Requested live price refresh. If configured, Firestore cache will update.');
-  });
-
-  el('btnSaveLocal').addEventListener('click', ()=>{
-    const rows = Array.from(document.querySelectorAll('#buildRows tr')).map(tr=>{
-      const tds = tr.querySelectorAll('td');
-      return {category: tds[0]?.innerText?.trim(), part: tds[1]?.innerText?.trim(), price: tds[2]?.innerText?.trim()}
-    });
-    const payload = {when: new Date().toISOString(), tier: getTier(), budget:Number(budgetInput.value||0), rows,
-      pricing:{markupPct:Number(markupPct.value||0), assembly:Number(assemblyFee.value||0), taxPct:Number(taxPct.value||0)},
-    };
-    const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `HRG_build_${Date.now()}.json`; a.click();
-  });
-
-  el('btnLoadLocal').addEventListener('click', ()=>{
-    const inp = document.createElement('input'); inp.type='file'; inp.accept='.json'; inp.onchange = (e)=>{
-      const f = e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{
-        try{
-          const data = JSON.parse(r.result);
-          tierSelect.value = data?.tier?.key || tierSelect.value; applyTierDefaults();
-          budgetRange.value = data?.budget||budgetRange.value; budgetInput.value = budgetRange.value; updateAllocUI();
-          markupPct.value = data?.pricing?.markupPct ?? markupPct.value; assemblyFee.value = data?.pricing?.assembly ?? assemblyFee.value; taxPct.value = data?.pricing?.taxPct ?? taxPct.value;
-        }catch(e){ alert('Invalid build file.'); }
-      }; r.readAsText(f);
-    }; document.body.appendChild(inp); inp.click(); inp.remove();
-  });
-
-  el('btnExportCSV').addEventListener('click', ()=>{
-    const rows = [['Category','Part','Price']];
-    document.querySelectorAll('#buildRows tr').forEach(tr=>{
-      const tds = tr.querySelectorAll('td');
-      rows.push([tds[0]?.innerText?.trim(), (tds[1]?.innerText||'').replace(/\n/g,' '), tds[2]?.innerText?.trim()]);
-    });
-    const csv = rows.map(r=>r.map(x=>`"${(x||'').replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], {type:'text/csv'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `HRG_build_${Date.now()}.csv`; a.click();
-  });
-
-  // Initial demo build to show UI
-  autoBuild();
   </script>
 </body>
 </html>
