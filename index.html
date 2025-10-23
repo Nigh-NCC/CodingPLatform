@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>HRG PC Builder Dashboard</title>
-  <link rel="icon" href="favicon.png" type="image/png" />
+  <!-- Optional: add your logo here if you have one -->
+  <!-- <link rel="icon" href="favicon.png" type="image/png" /> -->
   <style>
     body {
       font-family: "Montserrat", sans-serif;
@@ -152,7 +153,6 @@
       signOut
     } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
-    // --- Firebase setup ---
     const firebaseConfig = {
       apiKey: "AIzaSyCVXsMYLXlGrAuLWFnLe21IfV2a_vLdi-o",
       authDomain: "hrg-pc-build.firebaseapp.com",
@@ -161,25 +161,24 @@
       messagingSenderId: "846697611824",
       appId: "1:846697611824:web:eb58f939302d1b230ba3f5"
     };
+
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
 
-    // --- Auth functions ---
+    // Auth handlers
     window.login = async () => {
-      try {
-        await signInWithEmailAndPassword(auth, loginEmail.value, loginPass.value);
-      } catch (err) { alert(err.message); }
+      try { await signInWithEmailAndPassword(auth, loginEmail.value, loginPass.value); }
+      catch (err) { alert(err.message); }
     };
     window.register = async () => {
       try {
         await createUserWithEmailAndPassword(auth, loginEmail.value, loginPass.value);
-        alert("Account created — logged in!");
+        alert("Account created and logged in!");
       } catch (err) { alert(err.message); }
     };
     window.logout = async () => { await signOut(auth); };
 
-    // --- Auth State Listener ---
     onAuthStateChanged(auth, (user) => {
       if (user) {
         loggedOut.style.display = "none";
@@ -195,12 +194,12 @@
       }
     });
 
-    // --- Modal logic ---
+    // Modal controls
     const modal = document.getElementById("addPartModal");
     window.openModal = () => modal.style.display = "flex";
     window.closeModal = () => modal.style.display = "none";
 
-    // --- Firestore operations ---
+    // Add part
     window.addPart = async function() {
       const name = partName.value.trim();
       const brand = partBrand.value.trim();
@@ -208,6 +207,7 @@
       const price = parseFloat(partPrice.value);
       const perf = parseFloat(partPerf.value);
       if (!name || !brand || !category || isNaN(price)) { alert("Missing fields"); return; }
+
       await addDoc(collection(db, "parts"), {
         name, brand, category, price, perf_score: perf || 0,
         in_stock: true, added_at: new Date().toISOString()
@@ -217,6 +217,7 @@
       loadParts();
     };
 
+    // Load parts
     async function loadParts() {
       const snap = await getDocs(collection(db, "parts"));
       const body = document.getElementById("partsTableBody");
@@ -227,6 +228,7 @@
       });
     }
 
+    // Load systems
     async function loadSystems() {
       const snap = await getDocs(collection(db, "systems"));
       const body = document.getElementById("systemsTableBody");
@@ -237,11 +239,12 @@
       });
     }
 
-    // --- Build / Save System ---
+    // Build + Save System
     let currentBuild = null;
     window.autoBuild = async function() {
       const tier = parseInt(systemTier.value);
-      const budget = parseFloat(budget.value) || 1500;
+      const budgetValue = parseFloat(document.getElementById("budget").value) || 1500;
+
       const partsSnap = await getDocs(collection(db, "parts"));
       const parts = [];
       partsSnap.forEach((d)=>parts.push(d.data()));
@@ -250,15 +253,19 @@
       let selected = {}, total = 0;
       cats.forEach(cat=>{
         const cand = parts.filter(p=>p.category===cat);
-        if(cand.length){ const best = cand.sort((a,b)=>b.perf_score-a.perf_score)[0];
-          selected[cat] = best.name; total += best.price;
+        if(cand.length){
+          const best = cand.sort((a,b)=>b.perf_score-a.perf_score)[0];
+          selected[cat] = best.name;
+          total += best.price;
         }
       });
-      currentBuild = {tier,budget,parts:selected,total};
+
+      currentBuild = {tier,budget: budgetValue,parts:selected,total};
       buildOutput.innerHTML = `
         <h3>System Build</h3>
         <pre>${JSON.stringify(selected,null,2)}</pre>
-        <p><strong>Total:</strong> $${total.toFixed(2)}</p>`;
+        <p><strong>Total:</strong> $${total.toFixed(2)}</p>
+        <p><strong>Budget:</strong> $${budgetValue}</p>`;
       saveSystemBtn.style.display="inline-block";
     };
 
