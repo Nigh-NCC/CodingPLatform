@@ -3,37 +3,166 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HRG PC Builder — Private PCPartPicker</title>
+  <title>HRG PC Builder — Manage Parts</title>
   <style>
-    :root{
-      --bg:#0f1115; --panel:#151823; --muted:#2a3042; --text:#e6e9ef; --sub:#aab1c4; --brand:#7aa2ff; --good:#45d483; --warn:#ffc857; --bad:#ff6b6b;
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;background:#0f1115;color:#e6e9ef;margin:0;padding:24px}
+    .btn{padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;transition:.2s;background:#1b2030;color:#fff}
+    .btn:hover{background:#2a3145}
+    .primary{background:linear-gradient(90deg,#4c6fff,#7aa2ff)}
+    .ghost{background:#1b2030}
+    .tiny{font-size:12px;color:#aab1c4}
+    input,select{width:100%;padding:8px 10px;margin-bottom:10px;border-radius:8px;border:1px solid #2a3042;background:#151823;color:#e6e9ef}
+    label{font-size:13px;color:#aab1c4}
+    #partModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);justify-content:center;align-items:center;z-index:9999}
+    #partModal .inner{background:#151823;padding:24px;border-radius:16px;max-width:550px;width:90%;max-height:90%;overflow:auto}
+    .row{display:flex;gap:8px}
+  </style>
+</head>
+<body>
+  <h1>HRG PC Builder — Manage Parts</h1>
+  <button id="btnManageParts" class="btn ghost">Manage Parts</button>
+
+  <!-- Modal for Managing Parts -->
+  <div id="partModal">
+    <div class="inner">
+      <h2>Add / Edit / Delete Part</h2>
+      <form id="partForm">
+        <label>Category</label>
+        <select id="partCategory" required>
+          <option value="">Select</option>
+          <option value="cpu">CPU</option>
+          <option value="gpu">GPU</option>
+          <option value="mb">Motherboard</option>
+          <option value="ram">RAM</option>
+          <option value="storage">Storage</option>
+          <option value="psu">Power Supply</option>
+          <option value="cooler">Cooler</option>
+          <option value="case">Case</option>
+        </select>
+
+        <label>Brand</label>
+        <input id="partBrand" type="text" required>
+
+        <label>Model</label>
+        <input id="partModel" type="text" required>
+
+        <label>SKU (Unique ID)</label>
+        <input id="partSku" type="text" required>
+
+        <label>Production Year</label>
+        <input id="partYear" type="number" min="2000" max="2030" value="2025">
+
+        <label>Price (USD)</label>
+        <input id="partPrice" type="number" step="0.01" required>
+
+        <label>Performance (0–100)</label>
+        <input id="partPerf" type="number" min="0" max="100" required>
+
+        <div id="extraFields"></div>
+
+        <label>Upload Image</label>
+        <input id="partImage" type="file" accept="image/*">
+
+        <div class="row" style="justify-content:flex-end;">
+          <button type="button" id="btnLoadPart" class="btn ghost">Load by SKU</button>
+          <button type="button" id="btnDeletePart" class="btn ghost">Delete</button>
+          <button type="button" id="btnCloseModal" class="btn ghost">Cancel</button>
+          <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>
+      <div id="modalStatus" class="tiny" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+
+  <script>
+  const firebaseConfig = { /* your config here */ };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const storage = firebase.storage();
+
+  const modal = document.getElementById('partModal');
+  const btnOpen = document.getElementById('btnManageParts');
+  const btnClose = document.getElementById('btnCloseModal');
+  const form = document.getElementById('partForm');
+  const statusEl = document.getElementById('modalStatus');
+  const catSel = document.getElementById('partCategory');
+  const extraFields = document.getElementById('extraFields');
+
+  btnOpen.onclick = ()=>{modal.style.display='flex';statusEl.textContent=''};
+  btnClose.onclick = ()=>{modal.style.display='none'};
+
+  catSel.addEventListener('change', ()=>{
+    const cat = catSel.value; extraFields.innerHTML='';
+    const addField = (id,label,type='text',min,max)=>{
+      const l=document.createElement('label');l.textContent=label;
+      const i=document.createElement('input');i.id=id;i.type=type;if(min)i.min=min;if(max)i.max=max;
+      extraFields.appendChild(l);extraFields.appendChild(i);
+    };
+    if(cat==='gpu'){ addField('vram_gb','VRAM (GB)','number'); addField('length_mm','Length (mm)','number'); addField('tdp','TDP (W)','number'); }
+    if(cat==='cpu'){ addField('socket','Socket'); addField('cores','Cores','number'); addField('threads','Threads','number'); }
+    if(cat==='ram'){ addField('capacity_gb','Capacity (GB)','number'); addField('speed_mhz','Speed (MHz)','number'); addField('type','Type'); }
+    if(cat==='storage'){ addField('capacity_gb','Capacity (GB)','number'); addField('type','Type'); addField('read_mbps','Read (MB/s)','number'); }
+    if(cat==='psu'){ addField('watt','Wattage','number'); addField('efficiency','Efficiency'); addField('form','Form'); }
+    if(cat==='cooler'){ addField('type','Type'); addField('height_mm','Height (mm)','number'); }
+    if(cat==='case'){ addField('form','Form'); addField('gpu_max_mm','GPU Max (mm)','number'); addField('cooler_max_mm','Cooler Max (mm)','number'); }
+  });
+
+  form.addEventListener('submit', async(e)=>{
+    e.preventDefault();
+    const data={
+      category:catSel.value,
+      brand:partBrand.value,
+      model:partModel.value,
+      sku:partSku.value.trim(),
+      production_year:Number(partYear.value),
+      price_usd:Number(partPrice.value),
+      perf:Number(partPerf.value),
+      updated_at:new Date().toISOString()
+    };
+    // merge extra fields
+    extraFields.querySelectorAll('input').forEach(f=>{if(f.value) data[f.id]=isNaN(f.value)?f.value:Number(f.value)});
+    try{
+      // upload image if provided
+      const file=document.getElementById('partImage').files[0];
+      if(file){
+        const ref=storage.ref().child(`parts/${data.sku}/${file.name}`);
+        await ref.put(file);
+        data.image_url=await ref.getDownloadURL();
+      }
+      await db.collection('parts').doc(data.sku).set(data,{merge:true});
+      statusEl.textContent=`✅ ${data.sku} saved.`;
+      form.reset(); extraFields.innerHTML='';
+    }catch(err){statusEl.textContent='❌ '+err.message;}
+  });
+
+  document.getElementById('btnLoadPart').onclick=async()=>{
+    const sku=partSku.value.trim();if(!sku){statusEl.textContent='Enter SKU';return;}
+    const doc=await db.collection('parts').doc(sku).get();
+    if(doc.exists){
+      const d=doc.data();
+      catSel.value=d.category;partBrand.value=d.brand||'';partModel.value=d.model||'';
+      partYear.value=d.production_year||2025;partPrice.value=d.price_usd||'';partPerf.value=d.perf||'';
+      catSel.dispatchEvent(new Event('change'));
+      for(const k in d){if(extraFields.querySelector(`#${k}`))extraFields.querySelector(`#${k}`).value=d[k];}
+      statusEl.textContent=`✅ Loaded ${sku}`;
+    }else statusEl.textContent='❌ Not found';
+  };
+
+  document.getElementById('btnDeletePart').onclick=async()=>{
+    const sku=partSku.value.trim();if(!sku)return alert('Enter SKU first');
+    if(confirm(`Delete ${sku}?`)){
+      await db.collection('parts').doc(sku).delete();
+      statusEl.textContent=`🗑️ Deleted ${sku}`;
+      form.reset(); extraFields.innerHTML='';
     }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;background:linear-gradient(180deg,#0b0d12 0%,#0f1115 60%);color:var(--text)}
-    .container{max-width:1200px;margin:0 auto;padding:24px}
-    .grid{display:grid;gap:16px}
-    .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
-    .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
-    @media (max-width:980px){.grid.cols-3,.grid.cols-2{grid-template-columns:1fr}}
-    .card{background:var(--panel);border:1px solid var(--muted);border-radius:16px;padding:18px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    .row > *{flex:1}
-    h1{font-size:28px;margin:0 0 8px}
-    h2{font-size:18px;margin:0 0 8px;color:var(--sub)}
-    label{display:block;font-size:13px;color:var(--sub);margin-bottom:6px}
-    select,input,button{background:#0e111a;color:var(--text);border:1px solid var(--muted);border-radius:10px;padding:10px 12px}
-    input[type="range"]{width:100%}
-    .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid var(--muted);background:#0d1018;color:var(--sub);font-size:12px}
-    .tag{padding:2px 8px;border-radius:999px;background:#0d141f;border:1px solid var(--muted);color:var(--brand);font-size:11px;margin-left:8px}
-    .btn{cursor:pointer;transition:.15s transform ease, .15s background ease}
-    .btn:hover{transform:translateY(-1px)}
-    .btn.primary{background:linear-gradient(90deg,#4c6fff,#7aa2ff);border-color:#5f7cff}
-    .btn.ghost{background:#0d1018}
-    .kpis{display:flex;gap:12px;flex-wrap:wrap}
-    .kpi{flex:1;min-width:160px;padding:12px 14px;border-radius:12px;background:#0c111a;border:1px dashed var(--muted)}
-    .kpi .label{font-size:12px;color:var(--sub)}
-    .kpi .value{font-size:18px;font-weight:600;margin-top:4px}
+  };
+  </script>
+</body>
+</html>
     table{width:100%;border-collapse:separate;border-spacing:0 8px}
     th,td{padding:10px 12px;text-align:left;font-size:14px}
     thead th{color:var(--sub);font-weight:500}
