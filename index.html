@@ -1,585 +1,479 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Table, Search, Filter, Columns3, Download, Plus, X, Save, Trash2, RefreshCw, KanbanSquare, LayoutList, Database, Users, Building2, Handshake, ChevronDown, ChevronRight, Tag, Mail, Phone, Link2, MapPin, CalendarDays } from "lucide-react";
-import * as Papa from "papaparse";
-import * as XLSX from "xlsx";
-
-// --- Simple shadcn-like UI wrappers (no external CSS beyond Tailwind) ---
-const Button = ({ className = "", children, ...props }) => (
-  <button
-    className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 shadow-sm hover:shadow transition border border-slate-200 bg-white text-slate-800 text-sm ${className}`}
-    {...props}
-  >
-    {children}
-  </button>
-);
-
-const Badge = ({ children, className = "" }) => (
-  <span className={`px-2 py-0.5 rounded-full text-xs border ${className}`}>
-    {children}
-  </span>
-);
-
-const Card = ({ className = "", children }) => (
-  <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>
-);
-
-const Input = ({ className = "", ...props }) => (
-  <input
-    className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 ${className}`}
-    {...props}
-  />
-);
-
-const Textarea = ({ className = "", ...props }) => (
-  <textarea
-    className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 ${className}`}
-    {...props}
-  />
-);
-
-const Select = ({ options, value, onChange, className="" }) => (
-  <select
-    className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 ${className}`}
-    value={value}
-    onChange={(e)=>onChange(e.target.value)}
-  >
-    {options.map(o=> <option key={o.value} value={o.value}>{o.label}</option>)}
-  </select>
-);
-
-// --- Helpers ---
-const uid = () => Math.random().toString(36).slice(2, 10);
-
-const defaultPipelines = {
-  Deals: [
-    { id: "stage_new", name: "New" },
-    { id: "stage_qualify", name: "Qualification" },
-    { id: "stage_proposal", name: "Proposal" },
-    { id: "stage_negotiate", name: "Negotiation" },
-    { id: "stage_won", name: "Closed Won" },
-    { id: "stage_lost", name: "Closed Lost" },
-  ],
-  Leads: [
-    { id: "lead_new", name: "New" },
-    { id: "lead_contacted", name: "Contacted" },
-    { id: "lead_qualified", name: "Qualified" },
-    { id: "lead_nurture", name: "Nurturing" },
-    { id: "lead_converted", name: "Converted" },
-  ],
-};
-
-const moduleIcons = {
-  Leads: <Users className="w-4 h-4" />,
-  Contacts: <Mail className="w-4 h-4" />,
-  Accounts: <Building2 className="w-4 h-4" />,
-  Deals: <Handshake className="w-4 h-4" />,
-};
-
-const guessModule = (row) => {
-  const keys = Object.keys(row).map((k) => k.toLowerCase());
-  const hasCompany = keys.some((k) => k.includes("company") || k.includes("account"));
-  const hasDeal = keys.some((k) => k.includes("deal") || k.includes("amount") || k.includes("stage"));
-  const hasPerson = keys.some((k) => k.includes("first") || k.includes("last") || k.includes("name"));
-  const hasEmail = keys.some((k) => k.includes("email"));
-  if (hasDeal) return "Deals";
-  if (hasCompany && !hasPerson) return "Accounts";
-  if (hasPerson && hasEmail) return "Contacts";
-  return "Leads";
-};
-
-const normalizeRow = (row) => {
-  // Standardize common CRM fields
-  const out = { id: uid(), ...row };
-  // Normalize header variants
-  const map = {
-    name: ["name", "full name", "contact name"],
-    first_name: ["first", "first name", "firstname"],
-    last_name: ["last", "last name", "lastname"],
-    email: ["email", "e-mail"],
-    phone: ["phone", "mobile", "cell"],
-    company: ["company", "account", "org", "organization"],
-    title: ["title", "role", "position"],
-    website: ["website", "url"],
-    city: ["city"],
-    state: ["state", "region", "province"],
-    country: ["country"],
-    stage: ["stage", "status", "pipeline stage"],
-    amount: ["amount", "value", "deal size"],
-    notes: ["notes", "note", "comments"],
-    source: ["source", "lead source"],
-  };
-  const lower = Object.fromEntries(
-    Object.entries(row).map(([k, v]) => [k.toLowerCase().trim(), v])
-  );
-  for (const [std, variants] of Object.entries(map)) {
-    for (const v of variants) {
-      if (lower[v] != null && out[std] == null) {
-        out[std] = lower[v];
-        break;
-      }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HRG PC Builder — Private PCPartPicker</title>
+  <style>
+    :root{
+      --bg:#0f1115; --panel:#151823; --muted:#2a3042; --text:#e6e9ef; --sub:#aab1c4; --brand:#7aa2ff; --good:#45d483; --warn:#ffc857; --bad:#ff6b6b;
     }
-  }
-  return out;
-};
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;background:linear-gradient(180deg,#0b0d12 0%,#0f1115 60%);color:var(--text)}
+    .container{max-width:1200px;margin:0 auto;padding:24px}
+    .grid{display:grid;gap:16px}
+    .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    @media (max-width:980px){.grid.cols-3,.grid.cols-2{grid-template-columns:1fr}}
+    .card{background:var(--panel);border:1px solid var(--muted);border-radius:16px;padding:18px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .row > *{flex:1}
+    h1{font-size:28px;margin:0 0 8px}
+    h2{font-size:18px;margin:0 0 8px;color:var(--sub)}
+    label{display:block;font-size:13px;color:var(--sub);margin-bottom:6px}
+    select,input,button{background:#0e111a;color:var(--text);border:1px solid var(--muted);border-radius:10px;padding:10px 12px}
+    input[type="range"]{width:100%}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid var(--muted);background:#0d1018;color:var(--sub);font-size:12px}
+    .tag{padding:2px 8px;border-radius:999px;background:#0d141f;border:1px solid var(--muted);color:var(--brand);font-size:11px;margin-left:8px}
+    .btn{cursor:pointer;transition:.15s transform ease, .15s background ease}
+    .btn:hover{transform:translateY(-1px)}
+    .btn.primary{background:linear-gradient(90deg,#4c6fff,#7aa2ff);border-color:#5f7cff}
+    .btn.ghost{background:#0d1018}
+    .kpis{display:flex;gap:12px;flex-wrap:wrap}
+    .kpi{flex:1;min-width:160px;padding:12px 14px;border-radius:12px;background:#0c111a;border:1px dashed var(--muted)}
+    .kpi .label{font-size:12px;color:var(--sub)}
+    .kpi .value{font-size:18px;font-weight:600;margin-top:4px}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    th,td{padding:10px 12px;text-align:left;font-size:14px}
+    thead th{color:var(--sub);font-weight:500}
+    tbody tr{background:#0c111a;border:1px solid var(--muted)}
+    tbody tr td{border-top:1px solid var(--muted);border-bottom:1px solid var(--muted)}
+    tbody tr td:first-child{border-left:1px solid var(--muted);border-top-left-radius:10px;border-bottom-left-radius:10px}
+    tbody tr td:last-child{border-right:1px solid var(--muted);border-top-right-radius:10px;border-bottom-right-radius:10px}
+    .status{font-size:12px}
+    .status.good{color:var(--good)}
+    .status.warn{color:var(--warn)}
+    .status.bad{color:var(--bad)}
+    .mono{font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    .muted{color:var(--sub)}
+    .divider{height:1px;background:linear-gradient(90deg,transparent,#2a3042,transparent);margin:16px 0}
+    .tiny{font-size:11px;color:var(--sub)}
+    .sticky-actions{position:sticky;bottom:0;padding:10px;background:linear-gradient(180deg,transparent,rgba(15,17,21,.9) 35%);backdrop-filter:blur(4px)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="card">
+      <div class="row" style="align-items:flex-start">
+        <div style="flex:2">
+          <h1>HRG PC Builder <span class="tag mono">alpha</span></h1>
+          <div class="muted">Private PCPartPicker for Howard Resource Group — tier-aware, budget-driven, with live pricing hooks.</div>
+        </div>
+        <div class="row" style="flex:1;justify-content:flex-end">
+          <button id="btnExportCSV" class="btn ghost">Export CSV</button>
+          <button id="btnSaveLocal" class="btn ghost">Download Build (.json)</button>
+          <button id="btnLoadLocal" class="btn ghost">Load Build</button>
+          <button id="btnRefreshPrices" class="btn primary">Refresh Prices</button>
+        </div>
+      </div>
+    </header>
 
-const exportCSV = (rows) => {
-  const csv = Papa.unparse(rows);
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `crm_export_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-};
+    <section class="grid cols-3">
+      <div class="card">
+        <label for="tierSelect">Tier</label>
+        <select id="tierSelect"></select>
+        <div id="tierDesc" class="tiny" style="margin-top:8px"></div>
+        <div style="margin-top:10px" class="tiny">Eligibility: <span id="tierEligibility" class="pill">—</span></div>
+      </div>
 
-// --- File parsing ---
-async function parseFile(file) {
-  const ext = file.name.toLowerCase().split(".").pop();
-  if (ext === "csv") {
-    return new Promise((resolve, reject) => {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (res) => resolve(res.data.map(normalizeRow)),
-        error: reject,
-      });
-    });
-  }
-  if (ext === "xlsx" || ext === "xls" || ext === "xlsm" || ext === "xlsb" || ext === "xlam" || ext === "xltx" || ext === "xltm" || ext === "xla") {
-    const ab = await file.arrayBuffer();
-    const wb = XLSX.read(ab, { type: "array" });
-    const first = wb.SheetNames[0];
-    const sheet = wb.Sheets[first];
-    const json = XLSX.utils.sheet_to_json(sheet);
-    return json.map(normalizeRow);
-  }
-  // Some users say "xlsf" – handle as xlsx alias
-  if (ext === "xlsf") {
-    const ab = await file.arrayBuffer();
-    const wb = XLSX.read(ab, { type: "array" });
-    const first = wb.SheetNames[0];
-    const sheet = wb.Sheets[first];
-    const json = XLSX.utils.sheet_to_json(sheet);
-    return json.map(normalizeRow);
-  }
-  throw new Error("Unsupported file type. Please upload CSV or XLSX.");
-}
+      <div class="card">
+        <label for="budgetRange">Budget</label>
+        <div class="row">
+          <input id="budgetRange" type="range" min="600" max="7000" step="50" />
+          <input id="budgetInput" type="number" min="300" max="10000" step="50" />
+        </div>
+        <div class="kpis" style="margin-top:10px">
+          <div class="kpi"><div class="label">Allocated to CPU</div><div class="value" id="kpiCPU">—</div></div>
+          <div class="kpi"><div class="label">Allocated to GPU</div><div class="value" id="kpiGPU">—</div></div>
+          <div class="kpi"><div class="label">Headroom (PSU/Cooling)</div><div class="value" id="kpiHead">—</div></div>
+        </div>
+      </div>
 
-// --- Data store in localStorage ---
-const useLocal = (key, initial) => {
-  const [state, setState] = useState(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : initial;
-    } catch {
-      return initial;
-    }
-  });
-  useEffect(() => {
-    localStorage.setItem(key, JSON.stringify(state));
-  }, [key, state]);
-  return [state, setState];
-};
-
-// --- Record Detail Drawer ---
-const DetailDrawer = ({ record, onClose, onSave }) => {
-  const [draft, setDraft] = useState(record);
-  useEffect(()=>setDraft(record),[record]);
-  if (!record) return null;
-  const fields = Object.keys(draft || {}).filter(k => k !== "id");
-  return (
-    <AnimatePresence>
-      {record && (
-        <motion.div
-          initial={{ x: 400, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 400, opacity: 0 }}
-          className="fixed right-0 top-0 h-full w-[420px] bg-white border-l border-slate-200 shadow-2xl z-50 flex flex-col"
-        >
-          <div className="p-4 border-b flex items-center justify-between">
-            <div className="font-semibold">Record Details</div>
-            <div className="flex items-center gap-2">
-              <Button onClick={()=>onSave(draft)} className="bg-indigo-600 text-white border-indigo-600"><Save className="w-4 h-4"/>Save</Button>
-              <Button onClick={onClose}><X className="w-4 h-4"/>Close</Button>
-            </div>
+      <div class="card">
+        <div class="grid cols-2">
+          <div>
+            <label for="markupPct">Markup %</label>
+            <input id="markupPct" type="number" min="0" max="50" step="0.5" value="12" />
           </div>
-          <div className="p-4 overflow-auto space-y-3">
-            {fields.map((f)=> (
-              <div key={f}>
-                <label className="text-xs text-slate-500">{f}</label>
-                <Input value={draft[f] ?? ""} onChange={(e)=>setDraft({...draft,[f]: e.target.value})}/>
-              </div>
-            ))}
+          <div>
+            <label for="assemblyFee">Assembly Fee ($)</label>
+            <input id="assemblyFee" type="number" min="0" step="10" value="150" />
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
+          <div>
+            <label for="taxPct">Sales Tax %</label>
+            <input id="taxPct" type="number" min="0" step="0.1" value="0" />
+          </div>
+          <div>
+            <label for="pricingMode">Pricing Mode</label>
+            <select id="pricingMode">
+              <option value="live">Live (cached ≤24h)</option>
+              <option value="cached" selected>Cached (Firestore)</option>
+              <option value="manual">Manual / Demo Data</option>
+            </select>
+          </div>
+        </div>
+        <div class="tiny" style="margin-top:8px">Markup is applied to parts subtotal (not tax). Assembly fee added post‑markup.</div>
+      </div>
+    </section>
 
-// --- Kanban ---
-const Kanban = ({ rows, stageKey="stage", stages, onMove, onOpen }) => {
-  const columns = stages.map(s => ({...s, items: []}));
-  const byId = Object.fromEntries(columns.map(c=>[c.name.toLowerCase(), c]));
-  rows.forEach(r => {
-    const stage = String(r[stageKey] || "New").toLowerCase();
-    const col = byId[stage] || columns[0];
-    col.items.push(r);
-  });
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
-      {columns.map(col => (
-        <Card key={col.id} className="p-3 min-h-[300px]">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-medium flex items-center gap-2"><KanbanSquare className="w-4 h-4"/>{col.name}</div>
-            <Badge className="border-slate-200 bg-slate-50 text-slate-600">{col.items.length}</Badge>
-          </div>
-          <div className="space-y-2">
-            {col.items.map(item => (
-              <div key={item.id} className="border border-slate-200 rounded-xl p-3 hover:shadow cursor-pointer bg-white" onClick={()=>onOpen(item)}>
-                <div className="font-medium text-sm">{item.name || item.first_name || item.company || item.email || "Untitled"}</div>
-                <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-600">
-                  {item.amount && <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">${String(item.amount)}</Badge>}
-                  {item.email && <Badge className="border-slate-200 bg-slate-50"><Mail className="w-3 h-3 mr-1 inline"/>{item.email}</Badge>}
-                  {item.phone && <Badge className="border-slate-200 bg-slate-50"><Phone className="w-3 h-3 mr-1 inline"/>{item.phone}</Badge>}
-                  {item.source && <Badge className="border-sky-200 bg-sky-50 text-sky-700"><Tag className="w-3 h-3 mr-1 inline"/>{item.source}</Badge>}
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  <Select
-                    className="text-xs"
-                    value={String(item[stageKey] || stages[0].name)}
-                    onChange={(val)=>onMove(item.id, val)}
-                    options={stages.map(s=>({value:s.name, label:s.name}))}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      ))}
-    </div>
-  );
-};
+    <section class="card">
+      <h2>Requirements</h2>
+      <div class="row">
+        <label class="pill"><input id="reqWifi" type="checkbox" checked> Wi‑Fi</label>
+        <label class="pill"><input id="reqRGB" type="checkbox"> RGB Preference</label>
+        <label class="pill"><input id="reqLiquid" type="checkbox"> Liquid Cooling</label>
+        <label class="pill"><input id="reqSFF" type="checkbox"> Small Form Factor</label>
+        <label class="pill"><input id="reqSilent" type="checkbox"> Quiet / Low Noise</label>
+        <label class="pill"><input id="reqNvme" type="checkbox" checked> NVMe Boot</label>
+      </div>
+    </section>
 
-// --- Table ---
-const DataTable = ({ rows, columns, onOpen }) => {
-  return (
-    <div className="overflow-auto">
-      <table className="min-w-full text-sm">
-        <thead className="sticky top-0 bg-slate-50">
+    <section class="card">
+      <h2>Suggested Build</h2>
+      <div class="divider"></div>
+      <table>
+        <thead>
           <tr>
-            {columns.map((c) => (
-              <th key={c} className="text-left font-medium text-slate-600 px-3 py-2 border-b">{c}</th>
-            ))}
+            <th style="width:18%">Category</th>
+            <th>Part</th>
+            <th style="width:12%">Price</th>
+            <th style="width:14%">Compat</th>
+            <th style="width:16%">Notes</th>
           </tr>
         </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="hover:bg-slate-50 cursor-pointer" onClick={()=>onOpen(r)}>
-              {columns.map((c) => (
-                <td key={c} className="px-3 py-2 border-b">
-                  {String(r[c] ?? "").slice(0, 120)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
+        <tbody id="buildRows"></tbody>
       </table>
-    </div>
-  );
-};
 
-// --- New Record Modal ---
-const Modal = ({ open, title, children, onClose, onSave }) => (
-  <AnimatePresence>
-    {open && (
-      <motion.div className="fixed inset-0 z-50 flex items-center justify-center" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-        <div className="absolute inset-0 bg-black/20" onClick={onClose}/>
-        <motion.div initial={{scale:.95, opacity:0}} animate={{scale:1, opacity:1}} exit={{scale:.95, opacity:0}} className="relative w-[560px] max-w-[92vw] bg-white rounded-2xl border border-slate-200 shadow-2xl">
-          <div className="p-4 border-b flex items-center justify-between">
-            <div className="font-semibold">{title}</div>
-            <Button onClick={onClose}><X className="w-4 h-4"/>Close</Button>
-          </div>
-          <div className="p-4">{children}</div>
-          <div className="p-4 border-t flex items-center justify-end">
-            <Button className="bg-indigo-600 text-white border-indigo-600" onClick={onSave}><Save className="w-4 h-4"/>Save</Button>
-          </div>
-        </motion.div>
-      </motion.div>
-    )}
-  </AnimatePresence>
-);
-
-const QuickForm = ({ fields, onSubmit }) => {
-  const [vals, setVals] = useState({});
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        {fields.map((f)=> (
-          <div key={f.key} className="col-span-2 sm:col-span-1">
-            <label className="text-xs text-slate-500">{f.label}</label>
-            <Input value={vals[f.key] || ""} onChange={(e)=>setVals({...vals, [f.key]: e.target.value})}/>
-          </div>
-        ))}
+      <div class="divider"></div>
+      <div class="kpis">
+        <div class="kpi"><div class="label">Parts Subtotal</div><div class="value" id="kpiParts">—</div></div>
+        <div class="kpi"><div class="label">+ Markup</div><div class="value" id="kpiMarkup">—</div></div>
+        <div class="kpi"><div class="label">+ Assembly</div><div class="value" id="kpiAssembly">—</div></div>
+        <div class="kpi"><div class="label">Pre‑Tax Total</div><div class="value" id="kpiPretax">—</div></div>
+        <div class="kpi"><div class="label">+ Tax</div><div class="value" id="kpiTax">—</div></div>
+        <div class="kpi"><div class="label">Out‑the‑Door</div><div class="value" id="kpiOtd">—</div></div>
       </div>
-      <div className="flex justify-end">
-        <Button className="bg-indigo-600 text-white border-indigo-600" onClick={()=>onSubmit(vals)}><Plus className="w-4 h-4"/>Add</Button>
+
+      <div class="sticky-actions row" style="justify-content:flex-end;margin-top:10px">
+        <button id="btnAutoBuild" class="btn primary">Auto‑Build from Tier + Budget</button>
       </div>
-    </div>
-  );
-};
+    </section>
 
-// --- Main App ---
-export default function App() {
-  const [module, setModule] = useLocal("crm.module", "Leads");
-  const [data, setData] = useLocal("crm.data", { Leads: [], Contacts: [], Accounts: [], Deals: [] });
-  const [view, setView] = useLocal("crm.view", "table"); // table | kanban
-  const [search, setSearch] = useState("");
-  const [detail, setDetail] = useState(null);
-  const [showNew, setShowNew] = useState(false);
-  const [columns, setColumns] = useLocal("crm.columns", {});
+    <section class="card">
+      <h2>Data & Integrations</h2>
+      <div class="tiny">This page can use <strong>Firestore</strong> for cached pricing and a Cloud Function that synchronizes with PCPartPicker / vendors. Fill your config below.</div>
+      <div class="grid cols-2" style="margin-top:10px">
+        <div>
+          <label>Firebase Config (paste yours)</label>
+          <textarea id="fbConfig" rows="6" style="width:100%;background:#0e111a;color:var(--text);border:1px solid var(--muted);border-radius:10px;padding:10px" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
+          <div class="row" style="margin-top:8px"><button id="btnInitFb" class="btn ghost">Init Firebase</button><span id="fbStatus" class="tiny">Not initialized.</span></div>
+        </div>
+        <div>
+          <label>Cloud Function Endpoint (price sync proxy)</label>
+          <input id="fnEndpoint" placeholder="https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/priceSync" />
+          <div class="tiny" style="margin-top:6px">Expected GET/POST signature: <span class="mono">/priceSync?sku=RTX_4080_SUPER</span> or <span class="mono">/priceSync?category=gpu</span>. Returns JSON with <span class="mono">price_usd, vendor, url, updated_at</span>.</div>
+        </div>
+      </div>
+    </section>
+  </div>
 
-  const allRows = data[module] || [];
-  const visibleColumns = useMemo(() => {
-    const defaults = ["name","first_name","last_name","email","phone","company","title","stage","amount","source"]; 
-    const keys = Array.from(new Set(allRows.flatMap(r => Object.keys(r)).filter(k=>k!=="id")));
-    const chosen = columns[module] && columns[module].length ? columns[module] : keys.length ? keys.slice(0,8) : defaults;
-    return chosen;
-  }, [allRows, columns, module]);
+  <!-- Firebase SDKs (compat for ease). Remove if you bundle elsewhere. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
-  const filtered = useMemo(() => {
-    if (!search) return allRows;
-    const q = search.toLowerCase();
-    return allRows.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q)));
-  }, [allRows, search]);
+  <script>
+  /**************
+   * Tier Model *
+   **************/
+  const TIERS = [
+    { id:1, key:'sff_king', name:'SFF King', desc:'Small, durable, portable, efficient.', badge:'SFF', budget:[1200,4000], alloc:{cpu:.26,gpu:.34,mb:.10,ram:.07,storage:.10,psu:.07,cooler:.04,case:.02}, constraints:{sff:true, itx:true}},
+    { id:2, key:'mini_itx_masterpiece', name:'Mini‑ITX Masterpiece', desc:'Mini‑ITX powerhouse + custom styling.', badge:'Mini‑ITX', budget:[1500,5000], alloc:{cpu:.24,gpu:.38,mb:.09,ram:.07,storage:.09,psu:.06,cooler:.05,case:.02}, constraints:{itx:true, styling:true}},
+    { id:3, key:'gaming_perf', name:'Gaming PC — Performance', desc:'1080p/1440p high FPS.', badge:'Gaming', budget:[1200,3000], alloc:{cpu:.22,gpu:.42,mb:.09,ram:.07,storage:.08,psu:.07,cooler:.03,case:.02}, constraints:{}},
+    { id:4, key:'gaming_creator', name:'Gaming PC — Creator', desc:'Gaming + creative workloads.', badge:'Gaming/Creator', budget:[1500,3800], alloc:{cpu:.26,gpu:.38,mb:.09,ram:.09,storage:.08,psu:.06,cooler:.03,case:.01}, constraints:{}, flags:{more_ram:true}},
+    { id:5, key:'gaming_master', name:'Gaming PC — Master', desc:'4K / max‑settings monster.', badge:'Gaming', budget:[2200,6000], alloc:{cpu:.24,gpu:.46,mb:.08,ram:.07,storage:.06,psu:.05,cooler:.03,case:.01}, constraints:{}},
+    { id:6, key:'the_thinker', name:'The Thinker', desc:'AI / heavy CPU compute.', badge:'AI/CPU', budget:[1800,6000], alloc:{cpu:.36,gpu:.24,mb:.10,ram:.12,storage:.08,psu:.06,cooler:.03,case:.01}, constraints:{ecc_ok:true}},
+    { id:7, key:'stylistic_intrinsic', name:'Stylistic Intrinsic', desc:'Sleeper: minimal exterior, beautiful internals.', badge:'Sleeper', budget:[1400,4200], alloc:{cpu:.25,gpu:.35,mb:.10,ram:.08,storage:.08,psu:.06,cooler:.05,case:.03}, constraints:{minimal_case:true, rgb:false}},
+    { id:8, key:'stylistic_extrinsic', name:'Stylistic Extrinsic', desc:'Hidden cables + beautiful lit exterior.', badge:'Showcase', budget:[1600,4800], alloc:{cpu:.23,gpu:.37,mb:.09,ram:.08,storage:.08,psu:.06,cooler:.05,case:.04}, constraints:{rgb:true, glass_ok:true}},
+    { id:9, key:'the_beginner', name:'The Beginner', desc:'First‑time buyers; modular, easy upgrades.', badge:'Beginner', budget:[700,1600], alloc:{cpu:.25,gpu:.30,mb:.12,ram:.10,storage:.10,psu:.08,cooler:.03,case:.02}, constraints:{tool_less:true}, eligibility:'Eligible for 5% Upgrade Program discount.'},
+    { id:10, key:'upgrade_program', name:'Upgrade Program', desc:'Program for Tier 9: swap/refresh machines with fees or auto‑refresh @ 24 months (experimental).', badge:'Program', budget:[0,0], alloc:{}, constraints:{program:true}}
+  ];
 
-  const pipeline = defaultPipelines[module] || defaultPipelines["Leads"]; 
-  const stageKey = module === "Deals" ? "stage" : "stage"; // extend if needed
+  // Populate tier selector
+  const tierSelect = document.getElementById('tierSelect');
+  TIERS.forEach(t=>{
+    const opt = document.createElement('option');
+    opt.value=t.key; opt.textContent=`${t.id}. ${t.name}`; tierSelect.appendChild(opt);
+  });
+  tierSelect.value = 'gaming_perf';
 
-  // Handlers
-  const handleImport = async (files) => {
-    const results = [];
-    for (const file of files) {
-      const rows = await parseFile(file);
-      rows.forEach(r => {
-        const mod = guessModule(r);
-        results.push({ ...r, __module: mod });
-      });
+  const el = (id)=>document.getElementById(id);
+
+  const budgetRange = el('budgetRange');
+  const budgetInput = el('budgetInput');
+  const markupPct = el('markupPct');
+  const assemblyFee = el('assemblyFee');
+  const taxPct = el('taxPct');
+  const pricingMode = el('pricingMode');
+
+  // init defaults
+  budgetRange.value = 1800; budgetInput.value = 1800;
+
+  // sync range & number
+  budgetRange.addEventListener('input', e=>{budgetInput.value=e.target.value; updateAllocUI();});
+  budgetInput.addEventListener('input', e=>{budgetRange.value=e.target.value; updateAllocUI();});
+  tierSelect.addEventListener('change', ()=>{applyTierDefaults(); updateAllocUI();});
+
+  function fmt(n){return `$${Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0})}`}
+
+  function getTier(){return TIERS.find(t=>t.key===tierSelect.value)}
+
+  function applyTierDefaults(){
+    const t = getTier();
+    el('tierDesc').textContent = t?.desc || '';
+    el('tierEligibility').textContent = t?.eligibility || '—';
+    if(t && t.budget?.length===2){
+      budgetRange.min=t.budget[0]; budgetRange.max=t.budget[1];
+      budgetInput.min=t.budget[0]; budgetInput.max=t.budget[1];
+      // clamp current value
+      let v = Number(budgetInput.value||0); v=Math.min(Math.max(v,t.budget[0]), t.budget[1]||v);
+      budgetRange.value=v; budgetInput.value=v;
     }
-    const next = { ...data };
-    for (const r of results) {
-      const m = r.__module || module;
-      delete r.__module;
-      // de-dupe on email + company + name where possible
-      const exists = next[m].some(x => (r.email && x.email && String(x.email).toLowerCase() === String(r.email).toLowerCase()) || (r.name && x.name && String(x.name).toLowerCase() === String(r.name).toLowerCase()));
-      if (!exists) next[m] = [...next[m], r];
+  }
+
+  function updateAllocUI(){
+    const t = getTier(); if(!t||!t.alloc) return;
+    const budget = Number(budgetInput.value||0);
+    el('kpiCPU').textContent = fmt(budget * (t.alloc.cpu||0));
+    el('kpiGPU').textContent = fmt(budget * (t.alloc.gpu||0));
+    el('kpiHead').textContent = fmt(budget * ((t.alloc.psu||0)+(t.alloc.cooler||0)));
+  }
+
+  applyTierDefaults(); updateAllocUI();
+
+  /*********************
+   * Demo / Fallback DB *
+   *********************/
+  // Minimal demo dataset used when pricingMode === 'manual' or Firestore not ready
+  const DEMO_PARTS = [
+    {category:'cpu', sku:'RY7_7800X3D', name:'AMD Ryzen 7 7800X3D', socket:'AM5', tdp:120, price_usd:369, perf:95},
+    {category:'cpu', sku:'I5_13600K', name:'Intel Core i5‑13600K', socket:'LGA1700', tdp:181, price_usd:289, perf:85},
+    {category:'gpu', sku:'RTX_4070_SUPER', name:'NVIDIA GeForce RTX 4070 SUPER 12GB', length_mm:267, price_usd:579, perf:88},
+    {category:'gpu', sku:'RTX_4080_SUPER', name:'NVIDIA GeForce RTX 4080 SUPER 16GB', length_mm:304, price_usd:1199, perf:97},
+    {category:'mb',  sku:'ASUS_X670E_ITX', name:'ASUS ROG Strix X670E‑I Gaming (Mini‑ITX)', socket:'AM5', form:'Mini‑ITX', price_usd:389},
+    {category:'mb',  sku:'MSI_B760_TOMA', name:'MSI B760 Tomahawk WiFi (ATX)', socket:'LGA1700', form:'ATX', price_usd:189},
+    {category:'ram', sku:'DDR5_32_6000', name:'32GB (2x16) DDR5‑6000', type:'DDR5', price_usd:115},
+    {category:'ram', sku:'DDR5_64_6000', name:'64GB (2x32) DDR5‑6000', type:'DDR5', price_usd:225},
+    {category:'storage', sku:'SN850X_2TB', name:'WD Black SN850X 2TB NVMe', type:'NVMe', price_usd:169},
+    {category:'psu', sku:'SF750', name:'Corsair SF750 (SFX, 80+ Gold)', watt:750, form:'SFX', price_usd:169},
+    {category:'psu', sku:'RM850e', name:'Corsair RM850e (ATX 3.0, 80+ Gold)', watt:850, form:'ATX', price_usd:129},
+    {category:'cooler', sku:'NH_L12S', name:'Noctua NH‑L12S (SFF low‑profile)', type:'air', height_mm:70, price_usd:69},
+    {category:'cooler', sku:'LS120', name:'Lian Li Galahad II 240 AIO', type:'aio240', height_mm:0, price_usd:109},
+    {category:'case', sku:'NR200P', name:'Cooler Master NR200P (Mini‑ITX)', form:'Mini‑ITX', gpu_max:330, cooler_max:155, price_usd:99},
+    {category:'case', sku:'LianLi_O11D', name:'Lian Li O11 Dynamic', form:'ATX', gpu_max:420, cooler_max:170, price_usd:139},
+  ];
+
+  /********************
+   * Firestore Helpers *
+   ********************/
+  let fb = {app:null, db:null};
+  el('btnInitFb').addEventListener('click', ()=>{
+    try{
+      const cfg = JSON.parse(el('fbConfig').value || '{}');
+      fb.app = firebase.initializeApp(cfg);
+      fb.db = firebase.firestore();
+      el('fbStatus').textContent = 'Initialized ✅';
+    }catch(err){
+      console.error(err); el('fbStatus').textContent = 'Init failed ❌';
     }
-    setData(next);
-  };
+  });
 
-  const handleFileInput = async (e) => {
-    const files = Array.from(e.target.files || []);
-    await handleImport(files);
-    e.target.value = "";
-  };
+  async function getPartsFromFirestore(category){
+    if(!fb.db) return [];
+    try{
+      const snap = await fb.db.collection('parts').where('category','==',category).get();
+      return snap.docs.map(d=>({id:d.id, ...d.data()}));
+    }catch(e){ console.warn('FS read failed', e); return []; }
+  }
 
-  const onMoveStage = (id, newStage) => {
-    setData({
-      ...data,
-      [module]: data[module].map(r => r.id === id ? { ...r, [stageKey]: newStage } : r)
+  async function getParts(category){
+    const mode = pricingMode.value;
+    if(mode==='manual') return DEMO_PARTS.filter(p=>p.category===category);
+    if(mode==='cached'){
+      const fs = await getPartsFromFirestore(category);
+      return fs.length? fs : DEMO_PARTS.filter(p=>p.category===category);
+    }
+    if(mode==='live'){
+      // Try cloud function first; fallback to FS/demo
+      const ep = el('fnEndpoint').value?.trim();
+      try{
+        if(ep){
+          const res = await fetch(`${ep}?category=${encodeURIComponent(category)}`);
+          if(res.ok){ const data = await res.json(); if(Array.isArray(data) && data.length) return data; }
+        }
+      }catch(e){ console.warn('Live fetch failed, falling back', e); }
+      const fs = await getPartsFromFirestore(category);
+      return fs.length? fs : DEMO_PARTS.filter(p=>p.category===category);
+    }
+    return DEMO_PARTS.filter(p=>p.category===category);
+  }
+
+  /********************
+   * Build Engine v0.3 *
+   ********************/
+  const CATS = ['cpu','gpu','mb','ram','storage','psu','cooler','case'];
+
+  function estWattage(parts){
+    const cpu = parts.cpu?.tdp||95; const gpu = (parts.gpu?.tdp||250);
+    const other = 75; return cpu + gpu + other; // very rough
+  }
+
+  function compatibleScore(cat, candidate, picked){
+    // return {ok:boolean, reason:string}
+    const bad = (r)=>({ok:false, reason:r});
+    const ok = ()=>({ok:true, reason:'OK'});
+    const cpu = picked.cpu; const mb = picked.mb; const gpu = picked.gpu; const kase = picked.case;
+
+    if(cat==='mb' && picked.cpu){ if(candidate.socket && cpu.socket && candidate.socket!==cpu.socket) return bad('Socket mismatch'); }
+    if(cat==='cpu' && picked.mb){ if(candidate.socket && mb.socket && candidate.socket!==mb.socket) return bad('Socket mismatch'); }
+    if(cat==='ram' && picked.mb){ /* if DDR gen mismatch */ if(candidate.type && picked.mb.ram_type && candidate.type!==picked.mb.ram_type) return bad('RAM type mismatch'); }
+    if(cat==='gpu' && picked.case){ if(kase.gpu_max && candidate.length_mm && candidate.length_mm>kase.gpu_max) return bad('GPU too long'); }
+    if(cat==='cooler' && picked.case){ if(kase.cooler_max && candidate.height_mm && candidate.height_mm>kase.cooler_max) return bad('Cooler too tall'); }
+    if(cat==='psu'){
+      const need = estWattage({...picked, [cat]:candidate});
+      if(candidate.watt && candidate.watt < Math.ceil(need*1.3)) return bad('Wattage too low (<30% headroom)');
+    }
+    return ok();
+  }
+
+  async function autoBuild(){
+    const tier = getTier(); const budget = Number(budgetInput.value||0);
+    const alloc = tier.alloc||{}; const picked = {};
+
+    for(const cat of CATS){
+      const parts = await getParts(cat);
+      const allow = Math.max(1, Math.floor(budget*(alloc[mapCatToAllocKey(cat)]||0.05)));
+      // Prefer highest perf under budget; if none, take cheapest compatible
+      let best=null, cheapest=null;
+      for(const p of parts){
+        const price = Number(p.price_usd||p.price||0);
+        const score = compatibleScore(cat, p, picked);
+        if(!score.ok) continue;
+        if(!cheapest || price < (cheapest.price_usd||cheapest.price)) cheapest = p;
+        if(price <= allow){
+          if(!best || (Number(p.perf||0) > Number(best.perf||0))) best = p;
+        }
+      }
+      picked[cat] = best || cheapest || parts[0] || null;
+    }
+
+    renderBuild(picked);
+  }
+
+  function mapCatToAllocKey(cat){
+    return ({cpu:'cpu', gpu:'gpu', mb:'mb', ram:'ram', storage:'storage', psu:'psu', cooler:'cooler', case:'case'})[cat] || 'misc';
+  }
+
+  function renderBuild(parts){
+    const tbody = el('buildRows'); tbody.innerHTML='';
+    let subtotal = 0; const issues=[];
+
+    for(const cat of CATS){
+      const p = parts[cat];
+      const tr = document.createElement('tr');
+      const price = Number(p?.price_usd||p?.price||0);
+      subtotal += (isFinite(price)? price:0);
+
+      let comp = compatibleScore(cat, p||{}, parts);
+      tr.innerHTML = `
+        <td class="mono">${cat.toUpperCase()}</td>
+        <td>${p? (p.name || p.sku || '—') : '—'}<div class="tiny">${p?.sku||''}</div></td>
+        <td class="mono">${p? fmt(price):'—'}</td>
+        <td class="status ${comp.ok?'good':'warn'}">${comp.reason}</td>
+        <td class="tiny">${notesFor(cat, p)||''}</td>`;
+      tbody.appendChild(tr);
+      if(!comp.ok) issues.push(`${cat}: ${comp.reason}`);
+    }
+
+    const markupAmt = subtotal * (Number(markupPct.value||0)/100);
+    const preAssembly = subtotal + markupAmt;
+    const preTax = preAssembly + Number(assemblyFee.value||0);
+    const taxAmt = preTax * (Number(taxPct.value||0)/100);
+    const otd = preTax + taxAmt;
+
+    el('kpiParts').textContent = fmt(subtotal);
+    el('kpiMarkup').textContent = fmt(markupAmt);
+    el('kpiAssembly').textContent = fmt(Number(assemblyFee.value||0));
+    el('kpiPretax').textContent = fmt(preTax);
+    el('kpiTax').textContent = fmt(taxAmt);
+    el('kpiOtd').textContent = fmt(otd);
+
+    if(getTier().id===9){
+      el('tierEligibility').textContent = 'Eligible for 5% Upgrade Program discount (Tier 9).';
+    }
+  }
+
+  function notesFor(cat, p){
+    const t = getTier();
+    const rgb = el('reqRGB').checked; const sff = el('reqSFF').checked; const liquid = el('reqLiquid').checked; const silent = el('reqSilent').checked;
+    const hints=[];
+    if(!p) return '';
+    if(cat==='case' && sff) hints.push('SFF preferred');
+    if(cat==='cooler' && liquid) hints.push('Liquid cooling preferred');
+    if(rgb && (cat==='case' || cat==='cooler' || cat==='ram')) hints.push('RGB OK');
+    if(silent && (cat==='cooler')) hints.push('Low‑noise');
+    if(t.id===6 && cat==='ram') hints.push('Consider 64‑128GB');
+    if(t.key==='gaming_creator' && cat==='storage') hints.push('Prefer 2TB+ NVMe');
+    return hints.join(' · ');
+  }
+
+  // Wire buttons
+  el('btnAutoBuild').addEventListener('click', autoBuild);
+  el('btnRefreshPrices').addEventListener('click', async()=>{
+    // naive refresh: hit function for each category to warm cache
+    const ep = el('fnEndpoint').value?.trim(); if(!ep){ alert('Set Cloud Function endpoint first.'); return; }
+    for(const c of CATS){ try{ await fetch(`${ep}?category=${encodeURIComponent(c)}`);}catch(e){} }
+    alert('Requested live price refresh. If configured, Firestore cache will update.');
+  });
+
+  el('btnSaveLocal').addEventListener('click', ()=>{
+    const rows = Array.from(document.querySelectorAll('#buildRows tr')).map(tr=>{
+      const tds = tr.querySelectorAll('td');
+      return {category: tds[0]?.innerText?.trim(), part: tds[1]?.innerText?.trim(), price: tds[2]?.innerText?.trim()}
     });
-  };
-
-  const onOpen = (record) => setDetail(record);
-  const onSaveDetail = (draft) => {
-    setData({
-      ...data,
-      [module]: data[module].map(r => r.id === draft.id ? draft : r)
-    });
-    setDetail(null);
-  };
-
-  const onCreate = (vals) => {
-    const rec = normalizeRow(vals);
-    setData({ ...data, [module]: [{...rec, id: uid()}, ...data[module]] });
-    setShowNew(false);
-  };
-
-  const onDeleteAll = () => {
-    if (!confirm(`Delete all ${module} records?`)) return;
-    setData({ ...data, [module]: [] });
-  };
-
-  const onExport = () => exportCSV(data[module]);
-
-  const fileInputRef = useRef(null);
-
-  // Column manager
-  const allCols = useMemo(()=>Array.from(new Set(allRows.flatMap(r=>Object.keys(r)).filter(k=>k!=="id"))),[allRows]);
-  const [colsOpen, setColsOpen] = useState(false);
-  const [colsDraft, setColsDraft] = useState(visibleColumns);
-  useEffect(()=>setColsDraft(visibleColumns),[visibleColumns]);
-
-  const topActions = (
-    <div className="flex flex-wrap gap-2">
-      <Button onClick={()=>fileInputRef.current?.click()}><Upload className="w-4 h-4"/>Import CSV/XLSX</Button>
-      <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.xlsm,.xlsb,.xltx,.xltm,.xla,.xlsf" className="hidden" multiple onChange={handleFileInput}/>
-      <Button onClick={onExport}><Download className="w-4 h-4"/>Export CSV</Button>
-      <Button onClick={()=>setShowNew(true)} className="bg-indigo-600 text-white border-indigo-600"><Plus className="w-4 h-4"/>New {module.slice(0,-1)}</Button>
-      <Button onClick={()=>setColsOpen(true)}><Columns3 className="w-4 h-4"/>Columns</Button>
-      <Button onClick={onDeleteAll} className="text-red-600 border-red-200"><Trash2 className="w-4 h-4"/>Delete All</Button>
-      <Button onClick={()=>setView(view==="table"?"kanban":"table")}>
-        {view==="table" ? (<><KanbanSquare className="w-4 h-4"/>Kanban</>) : (<><LayoutList className="w-4 h-4"/>Table</>)}
-      </Button>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      {/* Top Nav */}
-      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white grid place-items-center shadow">
-              <Database className="w-5 h-5"/>
-            </div>
-            <div>
-              <div className="font-semibold">Mini CRM</div>
-              <div className="text-xs text-slate-500">Zoho‑style • CSV/XLSX Import • Kanban • Table • Local‑only</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-3 py-1.5">
-              <Search className="w-4 h-4 text-slate-500"/>
-              <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search records…" className="outline-none text-sm"/>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto p-4 grid grid-cols-12 gap-4">
-        {/* Sidebar */}
-        <Card className="col-span-12 md:col-span-3 lg:col-span-2 p-3 h-fit sticky top-[68px]">
-          <div className="text-xs uppercase tracking-wide text-slate-500 px-2 mb-2">Modules</div>
-          <div className="space-y-1">
-            {["Leads","Contacts","Accounts","Deals"].map((m)=> (
-              <button key={m} onClick={()=>setModule(m)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left ${module===m?"bg-indigo-50 border border-indigo-200":"hover:bg-slate-50"}`}>
-                <span className="opacity-80">{moduleIcons[m]}</span>
-                <span className="flex-1">{m}</span>
-                <Badge className="border-slate-200 bg-slate-50 text-slate-600">{data[m]?.length || 0}</Badge>
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="text-xs text-slate-500 mb-2">Tips</div>
-            <ul className="text-xs text-slate-600 list-disc pl-4 space-y-1">
-              <li>Click a row/card to edit details.</li>
-              <li>Use Kanban to move stage.</li>
-              <li>Data stays in your browser.</li>
-            </ul>
-          </div>
-        </Card>
-
-        {/* Main */}
-        <div className="col-span-12 md:col-span-9 lg:col-span-10 space-y-4">
-          <Card className="p-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="font-semibold">{module}</div>
-              <Badge className="border-slate-200 bg-slate-50 text-slate-600">{filtered.length} shown</Badge>
-            </div>
-            <div className="flex-1 md:hidden">
-              <Input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/>
-            </div>
-            {topActions}
-          </Card>
-
-          {view === "table" ? (
-            <Card className="p-3">
-              <DataTable rows={filtered} columns={visibleColumns} onOpen={onOpen} />
-            </Card>
-          ) : (
-            <Kanban rows={filtered} stageKey={stageKey} stages={pipeline} onMove={onMoveStage} onOpen={onOpen} />
-          )}
-        </div>
-      </div>
-
-      {/* Detail Drawer */}
-      <DetailDrawer record={detail} onClose={()=>setDetail(null)} onSave={onSaveDetail} />
-
-      {/* New Record */}
-      <Modal open={showNew} title={`New ${module.slice(0,-1)}`} onClose={()=>setShowNew(false)} onSave={()=>{}}>
-        <QuickForm
-          fields={[
-            { key: "name", label: "Name" },
-            { key: "first_name", label: "First name" },
-            { key: "last_name", label: "Last name" },
-            { key: "email", label: "Email" },
-            { key: "phone", label: "Phone" },
-            { key: "company", label: "Company" },
-            { key: "title", label: "Title" },
-            { key: "stage", label: "Stage" },
-            { key: "amount", label: "Amount" },
-            { key: "source", label: "Source" },
-            { key: "notes", label: "Notes" },
-          ]}
-          onSubmit={onCreate}
-        />
-      </Modal>
-
-      {/* Columns chooser */}
-      <Modal open={colsOpen} title={`Columns for ${module}`} onClose={()=>setColsOpen(false)} onSave={()=>{ setColumns({...columns, [module]: colsDraft}); setColsOpen(false); }}>
-        <div className="space-y-3">
-          <div className="text-sm text-slate-600">Choose up to 10 columns to display in the table view.</div>
-          <div className="flex flex-wrap gap-2">
-            {allCols.map(c => {
-              const on = colsDraft.includes(c);
-              return (
-                <button key={c} onClick={()=> setColsDraft(on ? colsDraft.filter(x=>x!==c) : [...colsDraft, c].slice(0,10))} className={`px-3 py-1.5 rounded-xl border text-sm ${on?"bg-indigo-50 border-indigo-200":"bg-white border-slate-200"}`}>
-                  {c}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </Modal>
-
-      {/* Dropzone overlay (optional visual) */}
-      <DropOverlay onFiles={handleImport} />
-    </div>
-  );
-}
-
-// --- Global drop overlay for quick importing ---
-function DropOverlay({ onFiles }) {
-  const [over, setOver] = useState(false);
-  useEffect(() => {
-    const onDrag = (e) => { e.preventDefault(); e.stopPropagation(); setOver(true); };
-    const onLeave = (e) => { e.preventDefault(); e.stopPropagation(); setOver(false); };
-    const onDrop = async (e) => { e.preventDefault(); e.stopPropagation(); setOver(false); const files = Array.from(e.dataTransfer.files || []); if (files.length) await onFiles(files); };
-    window.addEventListener("dragenter", onDrag);
-    window.addEventListener("dragover", onDrag);
-    window.addEventListener("dragleave", onLeave);
-    window.addEventListener("drop", onDrop);
-    return () => {
-      window.removeEventListener("dragenter", onDrag);
-      window.removeEventListener("dragover", onDrag);
-      window.removeEventListener("dragleave", onLeave);
-      window.removeEventListener("drop", onDrop);
+    const payload = {when: new Date().toISOString(), tier: getTier(), budget:Number(budgetInput.value||0), rows,
+      pricing:{markupPct:Number(markupPct.value||0), assembly:Number(assemblyFee.value||0), taxPct:Number(taxPct.value||0)},
     };
-  }, [onFiles]);
+    const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `HRG_build_${Date.now()}.json`; a.click();
+  });
 
-  if (!over) return null;
-  return (
-    <div className="fixed inset-0 z-40 pointer-events-none">
-      <div className="absolute inset-0 bg-indigo-600/10" />
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="pointer-events-auto bg-white border border-indigo-200 shadow-2xl rounded-2xl px-6 py-4 text-center">
-          <div className="font-semibold text-indigo-700">Drop CSV/XLSX to import into the CRM</div>
-          <div className="text-xs text-slate-600">We’ll auto-detect module & common fields</div>
-        </div>
-      </div>
-    </div>
-  );
-}
+  el('btnLoadLocal').addEventListener('click', ()=>{
+    const inp = document.createElement('input'); inp.type='file'; inp.accept='.json'; inp.onchange = (e)=>{
+      const f = e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{
+        try{
+          const data = JSON.parse(r.result);
+          tierSelect.value = data?.tier?.key || tierSelect.value; applyTierDefaults();
+          budgetRange.value = data?.budget||budgetRange.value; budgetInput.value = budgetRange.value; updateAllocUI();
+          markupPct.value = data?.pricing?.markupPct ?? markupPct.value; assemblyFee.value = data?.pricing?.assembly ?? assemblyFee.value; taxPct.value = data?.pricing?.taxPct ?? taxPct.value;
+        }catch(e){ alert('Invalid build file.'); }
+      }; r.readAsText(f);
+    }; document.body.appendChild(inp); inp.click(); inp.remove();
+  });
+
+  el('btnExportCSV').addEventListener('click', ()=>{
+    const rows = [['Category','Part','Price']];
+    document.querySelectorAll('#buildRows tr').forEach(tr=>{
+      const tds = tr.querySelectorAll('td');
+      rows.push([tds[0]?.innerText?.trim(), (tds[1]?.innerText||'').replace(/\n/g,' '), tds[2]?.innerText?.trim()]);
+    });
+    const csv = rows.map(r=>r.map(x=>`"${(x||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `HRG_build_${Date.now()}.csv`; a.click();
+  });
+
+  // Initial demo build to show UI
+  autoBuild();
+  </script>
+</body>
+</html>
