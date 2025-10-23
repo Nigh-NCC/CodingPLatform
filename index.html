@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HRG PC Builder – Live Inventory & Quotes</title>
+  <title>HRG PC Builder – Live Quotes & Inventory</title>
   <style>
     body {
       font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Helvetica Neue, Arial, sans-serif;
@@ -12,36 +12,54 @@
       margin: 0;
       padding: 24px;
     }
-    h1 { margin-top: 0; }
+    h1, h2, h3 { margin-top: 0; }
     .btn { padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; }
     .primary { background: linear-gradient(90deg,#4c6fff,#7aa2ff); color: #fff; }
     .ghost { background: #1b2030; color: #fff; }
     input, select {
-      width: 100%;
-      padding: 8px 10px;
-      margin-bottom: 10px;
-      border-radius: 8px;
-      border: 1px solid #2a3042;
-      background: #151823;
-      color: #e6e9ef;
+      width: 100%; padding: 8px 10px; margin-bottom: 10px; border-radius: 8px;
+      border: 1px solid #2a3042; background: #151823; color: #e6e9ef;
     }
     label { font-size: 13px; color: #aab1c4; display: block; margin-top: 6px; }
     .tiny { font-size: 12px; color: #aab1c4; }
+    table { width: 100%; margin-top: 16px; border-collapse: collapse; }
+    th, td { padding: 6px 10px; border-bottom: 1px solid #2a3042; text-align: left; }
+    th { color: #7aa2ff; }
+    tr:hover { background: #1b2030; }
   </style>
 </head>
 <body>
-  <h1>HRG PC Builder – Live Inventory & Quotes</h1>
-  <p class="tiny">Firebase and live pricing backend are pre-configured.</p>
+  <h1>HRG PC Builder – Live Quotes & Inventory</h1>
+  <p class="tiny">Firebase and backend fully connected.</p>
 
-  <button id="btnTest" class="btn primary">Test Connection</button>
+  <button id="btnTest" class="btn ghost">Test Connection</button>
   <pre id="output" style="margin-top:16px;background:#151823;padding:12px;border-radius:8px;"></pre>
+
+  <h2 style="margin-top:32px;">Quote Builder</h2>
+  <input id="budgetInput" type="number" placeholder="Enter total budget (e.g. 2500)" />
+  <label><input id="preferStock" type="checkbox" checked> Prefer in-stock parts</label>
+  <button id="btnQuote" class="btn primary">Generate Quote</button>
+  <button id="btnReserve" class="btn ghost">Reserve Stock</button>
+
+  <table id="quoteTable">
+    <thead>
+      <tr><th>Category</th><th>Part</th><th>Price</th><th>SKU</th><th>Status</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h3 style="margin-top:24px;">Client Info</h3>
+  <input id="clientName" placeholder="Client Name" />
+  <input id="clientPhone" placeholder="Phone" />
+  <input id="clientEmail" placeholder="Email" />
+  <button id="btnSaveQuote" class="btn primary">Save Quote</button>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 
   <script>
-  // ---------- Firebase Config (baked in) ----------
+  // ---------------- Firebase Config ----------------
   const firebaseConfig = {
     apiKey: "AIzaSyCVXsMYLXlGrAuLWFnLe21IfV2a_vLdi-o",
     authDomain: "hrg-pc-build.firebaseapp.com",
@@ -51,31 +69,25 @@
     appId: "1:846697611824:web:eb58f939302d1b230ba3f5"
   };
 
-  // ---------- Safe Initialization ----------
-  if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-  } else {
-    firebase.app();
-  }
+  // Safe init
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  else firebase.app();
 
   const db = firebase.firestore();
   const storage = firebase.storage();
 
-  // ---------- Cloud Function Endpoints ----------
+  // Cloud Function endpoints
   const FN_PRICE = "https://us-central1-hrg-pc-build.cloudfunctions.net/priceSync";
   const FN_SUGGEST = "https://us-central1-hrg-pc-build.cloudfunctions.net/stockSuggest";
   const FN_RESERVE = "https://us-central1-hrg-pc-build.cloudfunctions.net/reservePart";
 
-  // ---------- Quick test ----------
+  // ---------------- Test Connection ----------------
   document.getElementById("btnTest").onclick = async () => {
     const out = document.getElementById("output");
     out.textContent = "Testing connection...";
-
     try {
-      // simple Firestore test
       const testDoc = await db.collection("parts").limit(1).get();
       const count = testDoc.size;
-      // simple backend test
       const res = await fetch(FN_PRICE + "?sku=RTX_4070_SUPER");
       const text = await res.text();
       out.textContent =
@@ -84,9 +96,121 @@
         "✅ Function Response (priceSync):\n" + text;
     } catch (err) {
       out.textContent = "❌ Error: " + err.message;
-      console.error(err);
     }
   };
+
+  // ---------------- Quote Builder ----------------
+  const CATEGORIES = ["cpu", "gpu", "mb", "ram", "storage", "psu", "cooler", "case"];
+  const ALLOC = { cpu:.25, gpu:.35, mb:.1, ram:.08, storage:.08, psu:.05, cooler:.04, case:.05 };
+
+  async function suggestPart(category, budgetAlloc) {
+    try {
+      const res = await fetch(FN_SUGGEST, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          budgetAlloc,
+          preferInStock: document.getElementById("preferStock").checked
+        })
+      });
+      const data = await res.json();
+      return data.part || null;
+    } catch (err) { console.error("stockSuggest", err); return null; }
+  }
+
+  async function reservePart(sku) {
+    try {
+      await fetch(FN_RESERVE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku, qty: 1 })
+      });
+    } catch (err) { console.error("reservePart", err); }
+  }
+
+  document.getElementById("btnQuote").onclick = async () => {
+    const total = Number(document.getElementById("budgetInput").value || 0);
+    if (total <= 0) return alert("Enter a budget first.");
+    const tbody = document.querySelector("#quoteTable tbody");
+    tbody.innerHTML = "<tr><td colspan='5'>Building quote...</td></tr>";
+
+    const results = [];
+    for (const cat of CATEGORIES) {
+      const allocBudget = Math.round(total * (ALLOC[cat] || 0.05));
+      const part = await suggestPart(cat, allocBudget);
+      if (part) results.push(part);
+    }
+
+    tbody.innerHTML = results.map(p => `
+      <tr>
+        <td>${p.category}</td>
+        <td>${p.brand || ""} ${p.model || ""}</td>
+        <td>$${p.price_usd || 0}</td>
+        <td class="tiny">${p.sku}</td>
+        <td>${p.in_stock ? "✅ In Stock" :
+             p.is_new ? "🆕 To-Order" :
+             (p.order_status || "—")}</td>
+      </tr>
+    `).join("");
+  };
+
+  document.getElementById("btnReserve").onclick = async () => {
+    const rows = document.querySelectorAll("#quoteTable tbody tr");
+    for (const row of rows) {
+      const sku = row.querySelector(".tiny")?.textContent?.trim();
+      if (sku && !sku.startsWith("NEW_")) await reservePart(sku);
+    }
+    alert("Stock reserved where available!");
+  };
+
+  // ---------------- Save Quote ----------------
+  function generateQuoteId() {
+    const now = new Date();
+    const stamp = now.toISOString().slice(0,19).replace(/[-:T]/g,"").slice(2,12);
+    const rand = Math.floor(Math.random() * 900 + 100);
+    return `Q-${stamp}-${rand}`;
+  }
+
+  async function saveQuote() {
+    const tbody = document.querySelector("#quoteTable tbody");
+    const rows = tbody.querySelectorAll("tr");
+    if (!rows.length) return alert("Generate a quote first.");
+
+    const totalBudget = Number(document.getElementById("budgetInput").value || 0);
+    const parts = Array.from(rows).map(row => ({
+      category: row.children[0].innerText,
+      brand_model: row.children[1].innerText,
+      price_usd: Number(row.children[2].innerText.replace("$","")),
+      sku: row.children[3].innerText,
+      status: row.children[4].innerText
+    }));
+
+    const client = {
+      name: document.getElementById("clientName").value.trim(),
+      phone: document.getElementById("clientPhone").value.trim(),
+      email: document.getElementById("clientEmail").value.trim()
+    };
+
+    const quote = {
+      id: generateQuoteId(),
+      created_at: new Date().toISOString(),
+      total_budget: totalBudget,
+      parts,
+      client,
+      status: "draft"
+    };
+
+    try {
+      await db.collection("quotes").doc(quote.id).set(quote);
+      alert(`✅ Quote saved as ${quote.id}`);
+    } catch (err) {
+      console.error(err);
+      alert("❌ Error saving quote: " + err.message);
+    }
+  }
+
+  document.getElementById("btnSaveQuote").onclick = saveQuote;
   </script>
 </body>
 </html>
